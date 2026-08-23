@@ -7,6 +7,7 @@ namespace Cleaner;
 public partial class MainWindow : Window
 {
     private readonly CleanerScanService _scanService = new();
+    private readonly CleanupHistoryService _historyService = new();
     private ScanResult? _lastScan;
 
     public MainWindow()
@@ -21,6 +22,7 @@ public partial class MainWindow : Window
 
         WelcomeText.Text = $"Добрый день, {userName}";
         UserInitialText.Text = userName[..1].ToUpperInvariant();
+        RestoreLatestActivity();
     }
 
     private async void ScanButton_Click(object sender, RoutedEventArgs e)
@@ -115,6 +117,12 @@ public partial class MainWindow : Window
         try
         {
             var deleted = await _scanService.DeleteAsync(_lastScan, deleteUserTemp, deleteWindowsTemp);
+            var selectedBytes = (deleteUserTemp ? _lastScan.UserTempBytes : 0) +
+                (deleteWindowsTemp ? _lastScan.WindowsTempBytes : 0);
+            var scope = deleteUserTemp && deleteWindowsTemp
+                ? "Пользовательский и системный Temp"
+                : deleteUserTemp ? "Пользовательский Temp" : "Системный Temp";
+            _historyService.Append(new CleanupHistoryEntry(DateTimeOffset.Now, scope, deleted, selectedBytes));
             StatusText.Text = deleted == 0 ? "Нечего удалить" : "Очистка завершена";
             StatusDetails.Text = $"Удалено файлов: {deleted:N0}";
             ActivityText.Text = "Очистка выполнена только что";
@@ -147,5 +155,18 @@ public partial class MainWindow : Window
         }
 
         return $"{value:0.#} {units[unit]}";
+    }
+
+    private void RestoreLatestActivity()
+    {
+        var latest = _historyService.LoadLatest();
+        if (latest is null)
+        {
+            return;
+        }
+
+        ActivityText.Text = $"Последняя очистка: {latest.Timestamp.LocalDateTime:g}";
+        ActivityResultText.Text = $"Удалено файлов: {latest.DeletedFiles:N0}";
+        ActivitySizeText.Text = $"{latest.Scope} · освобождено {FormatBytes(latest.ReclaimedBytes)}";
     }
 }
