@@ -24,16 +24,32 @@ public sealed class RecycleBinService
     private const uint NoProgressUi = 0x00000002;
     private const uint NoSound = 0x00000004;
 
-    public RecycleBinInfo GetInfo()
+    public RecycleBinInfo GetInfo(IEnumerable<string>? roots = null)
     {
-        var info = new QueryInfo { Size = Marshal.SizeOf<QueryInfo>() };
-        var result = SHQueryRecycleBin(null, ref info);
-        return result == 0 ? new RecycleBinInfo(info.Bytes, checked((int)Math.Min(info.Items, int.MaxValue))) : new RecycleBinInfo(0, 0);
+        var totalBytes = 0L;
+        var totalItems = 0L;
+        foreach (var root in roots ?? [null!])
+        {
+            var info = new QueryInfo { Size = Marshal.SizeOf<QueryInfo>() };
+            if (SHQueryRecycleBin(root, ref info) == 0)
+            {
+                totalBytes += info.Bytes;
+                totalItems += info.Items;
+            }
+        }
+
+        return new RecycleBinInfo(totalBytes, checked((int)Math.Min(totalItems, int.MaxValue)));
     }
 
-    public bool Empty()
+    public bool Empty(IEnumerable<string>? roots = null)
     {
-        var result = SHEmptyRecycleBin(IntPtr.Zero, null, NoConfirmation | NoProgressUi | NoSound);
-        return result == 0;
+        var success = true;
+        foreach (var root in roots ?? [null!])
+        {
+            var result = SHEmptyRecycleBin(IntPtr.Zero, root, NoConfirmation | NoProgressUi | NoSound);
+            success &= result == 0;
+        }
+
+        return success;
     }
 }

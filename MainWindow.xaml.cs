@@ -8,6 +8,7 @@ public partial class MainWindow : Window
 {
     private readonly CleanerScanService _scanService = new();
     private readonly CleanupHistoryService _historyService = new();
+    private IReadOnlyList<string> _selectedDriveRoots;
     private ScanResult? _lastScan;
 
     public MainWindow()
@@ -22,6 +23,8 @@ public partial class MainWindow : Window
 
         WelcomeText.Text = $"Добрый день, {userName}";
         UserInitialText.Text = userName[..1].ToUpperInvariant();
+        _selectedDriveRoots = GetDefaultDriveRoots();
+        DriveButton.Content = $"Диски: {_selectedDriveRoots.Count}";
         RestoreLatestActivity();
     }
 
@@ -36,7 +39,7 @@ public partial class MainWindow : Window
 
         try
         {
-            var result = await _scanService.ScanAsync();
+            var result = await _scanService.ScanAsync(_selectedDriveRoots);
             _lastScan = result;
 
             StatusText.Text = result.TotalBytes == 0 ? "Всё чисто" : $"Найдено {FormatBytes(result.TotalBytes)}";
@@ -120,7 +123,7 @@ public partial class MainWindow : Window
         CleanButton.Content = "Очищаем...";
         try
         {
-            var deleted = await _scanService.DeleteAsync(_lastScan, deleteUserTemp, deleteWindowsTemp, deleteRecycleBin);
+            var deleted = await _scanService.DeleteAsync(_lastScan, _selectedDriveRoots, deleteUserTemp, deleteWindowsTemp, deleteRecycleBin);
             var selectedBytes = (deleteUserTemp ? _lastScan.UserTempBytes : 0) +
                 (deleteWindowsTemp ? _lastScan.WindowsTempBytes : 0) +
                 (deleteRecycleBin ? _lastScan.RecycleBin.Bytes : 0);
@@ -164,6 +167,30 @@ public partial class MainWindow : Window
         }
 
         return $"{value:0.#} {units[unit]}";
+    }
+
+    private void DriveButton_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new DriveSelectionWindow(_selectedDriveRoots) { Owner = this };
+        if (dialog.ShowDialog() == true)
+        {
+            _selectedDriveRoots = dialog.SelectedDrives;
+            DriveButton.Content = $"Диски: {_selectedDriveRoots.Count}";
+            _lastScan = null;
+            CleanButton.IsEnabled = false;
+            DetailsButton.IsEnabled = false;
+            StatusText.Text = "Диски выбраны";
+            StatusDetails.Text = "Запустите проверку заново";
+        }
+    }
+
+    private static IReadOnlyList<string> GetDefaultDriveRoots()
+    {
+        var drives = DriveInfo.GetDrives()
+            .Where(drive => drive.IsReady && drive.DriveType == DriveType.Fixed)
+            .Select(drive => drive.RootDirectory.FullName)
+            .ToArray();
+        return drives.Length > 0 ? drives : [Path.GetPathRoot(Environment.SystemDirectory)!];
     }
 
     private void RestoreLatestActivity()

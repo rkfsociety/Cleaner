@@ -14,15 +14,15 @@ public sealed record ScanResult(IReadOnlyList<ScanFile> UserTempFiles, IReadOnly
 
 public sealed class CleanerScanService
 {
-    public Task<ScanResult> ScanAsync(CancellationToken cancellationToken = default)
+    public Task<ScanResult> ScanAsync(IEnumerable<string> selectedDrives, CancellationToken cancellationToken = default)
     {
         return Task.Run(() => new ScanResult(
             ScanDirectory(Path.GetTempPath(), cancellationToken),
             ScanDirectory(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "Temp"), cancellationToken),
-            new RecycleBinService().GetInfo()), cancellationToken);
+            new RecycleBinService().GetInfo(selectedDrives)), cancellationToken);
     }
 
-    public Task<int> DeleteAsync(ScanResult result, bool deleteUserTemp, bool deleteWindowsTemp, bool deleteRecycleBin, CancellationToken cancellationToken = default)
+    public Task<int> DeleteAsync(ScanResult result, IEnumerable<string> selectedDrives, bool deleteUserTemp, bool deleteWindowsTemp, bool deleteRecycleBin, CancellationToken cancellationToken = default)
     {
         return Task.Run(() =>
         {
@@ -37,7 +37,7 @@ public sealed class CleanerScanService
                 deleted += DeleteFiles(result.WindowsTempFiles, Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "Temp"), cancellationToken);
             }
 
-            if (deleteRecycleBin && result.RecycleBin.Items > 0 && new RecycleBinService().Empty())
+            if (deleteRecycleBin && result.RecycleBin.Items > 0 && new RecycleBinService().Empty(selectedDrives))
             {
                 deleted += result.RecycleBin.Items;
             }
