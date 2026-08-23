@@ -1,4 +1,5 @@
 using System.IO;
+using System.Security.Principal;
 using System.Text;
 using System.Windows;
 
@@ -189,6 +190,31 @@ public partial class MainWindow : Window
     {
         var dialog = new HistoryWindow(_historyService.LoadAll()) { Owner = this };
         dialog.ShowDialog();
+    }
+
+    private void CleanupNavigation_Click(object sender, RoutedEventArgs e)
+    {
+        ScanButton_Click(sender, e);
+    }
+
+    private void SettingsNavigation_Click(object sender, RoutedEventArgs e)
+    {
+        var isAdministrator = new WindowsPrincipal(WindowsIdentity.GetCurrent()).IsInRole(WindowsBuiltInRole.Administrator);
+        var historyPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Cleaner", "history.json");
+        MessageBox.Show(
+            $"Режим администратора: {(isAdministrator ? "включён" : "не включён")}\nВыбрано дисков: {_selectedDriveRoots.Count}\nФайл журнала: {historyPath}",
+            "Настройки Cleaner",
+            MessageBoxButton.OK,
+            MessageBoxImage.Information);
+    }
+
+    private void HelpNavigation_Click(object sender, RoutedEventArgs e)
+    {
+        MessageBox.Show(
+            "1. Нажмите «Начать проверку».\n2. При необходимости выберите диски.\n3. Отметьте категории очистки.\n4. Откройте детали и нажмите «Очистить выбранное».\n5. Подтвердите удаление.\n\nЗанятые и недоступные файлы пропускаются.",
+            "Как пользоваться Cleaner",
+            MessageBoxButton.OK,
+            MessageBoxImage.Information);
     }
 
     private static IReadOnlyList<string> GetDefaultDriveRoots()
