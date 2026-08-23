@@ -1,4 +1,5 @@
 using System.IO;
+using System.Text;
 using System.Windows;
 
 namespace Cleaner;
@@ -26,6 +27,7 @@ public partial class MainWindow : Window
     {
         ScanButton.IsEnabled = false;
         CleanButton.IsEnabled = false;
+        DetailsButton.IsEnabled = false;
         ScanButton.Content = "Проверяем...";
         StatusText.Text = "Идёт проверка";
         StatusDetails.Text = "Анализируем временные файлы и кэш";
@@ -45,6 +47,7 @@ public partial class MainWindow : Window
             ActivityResultText.Text = $"Найдено файлов: {result.TotalFiles:N0}";
             ActivitySizeText.Text = "Выберите категории и подтвердите очистку";
             CleanButton.IsEnabled = result.TotalFiles > 0;
+            DetailsButton.IsEnabled = result.TotalFiles > 0;
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
@@ -52,12 +55,33 @@ public partial class MainWindow : Window
             StatusDetails.Text = "Не удалось прочитать часть файлов";
             ActivityText.Text = "Произошла ошибка сканирования";
             ActivityResultText.Text = exception.Message;
+            _lastScan = null;
         }
         finally
         {
             ScanButton.IsEnabled = true;
             ScanButton.Content = "Начать проверку";
         }
+    }
+
+    private void DetailsButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_lastScan is null)
+        {
+            return;
+        }
+
+        var details = new StringBuilder();
+        details.AppendLine($"Пользовательский Temp: {FormatBytes(_lastScan.UserTempBytes)} ({_lastScan.UserTempFiles.Count:N0} файлов)");
+        details.AppendLine($"Системный Temp: {FormatBytes(_lastScan.WindowsTempBytes)} ({_lastScan.WindowsTempFiles.Count:N0} файлов)");
+        details.AppendLine();
+        details.AppendLine("Примеры найденных файлов:");
+        foreach (var file in _lastScan.UserTempFiles.Concat(_lastScan.WindowsTempFiles).Take(8))
+        {
+            details.AppendLine($"• {file.Path}");
+        }
+
+        MessageBox.Show(details.ToString(), "Детали сканирования", MessageBoxButton.OK, MessageBoxImage.Information);
     }
 
     private async void CleanButton_Click(object sender, RoutedEventArgs e)
@@ -97,6 +121,7 @@ public partial class MainWindow : Window
             ActivityResultText.Text = $"Удалено файлов: {deleted:N0}";
             ActivitySizeText.Text = "Повторите проверку, чтобы увидеть актуальный результат";
             _lastScan = null;
+            DetailsButton.IsEnabled = false;
             UserTempValue.Text = "0 Б";
             WindowsTempValue.Text = "0 Б";
             UserTempSubtitle.Text = "Требуется повторная проверка";
