@@ -18,10 +18,17 @@ jobs:
           dotnet-version: '8.0.x'
 
       - name: Restore
-        run: dotnet restore Cleaner.csproj
+        run: dotnet restore Cleaner.Tests/Cleaner.Tests.csproj
 
       - name: Build
         run: dotnet build Cleaner.csproj --configuration Release --no-restore
 
       - name: Test
-        run: dotnet test Cleaner.Tests/Cleaner.Tests.csproj --configuration Release
+        run: dotnet test Cleaner.Tests/Cleaner.Tests.csproj --configuration Release --no-restore
+
+      - name: Publish portable executable
+        run: ./scripts/publish-windows.ps1
+
+      - name: Verify published executable
+        run: |
+          if (!(Test-Path publish/win-x64/Cleaner.exe)) { throw "Cleaner.exe was not published" }

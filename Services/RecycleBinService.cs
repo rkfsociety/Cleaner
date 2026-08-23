@@ -54,10 +54,15 @@ public sealed class RecycleBinService
         var results = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
         foreach (var root in roots ?? [null!])
         {
-            var result = SHEmptyRecycleBin(IntPtr.Zero, root, NoConfirmation | NoProgressUi | NoSound);
-            results[root ?? string.Empty] = result == 0 || result == RecycleBinAlreadyEmpty;
+            results[root ?? string.Empty] = Empty(root);
         }
 
         return results;
+    }
+
+    public bool Empty(string? root)
+    {
+        var result = SHEmptyRecycleBin(IntPtr.Zero, root, NoConfirmation | NoProgressUi | NoSound);
+        return result == 0 || result == RecycleBinAlreadyEmpty;
     }
 }

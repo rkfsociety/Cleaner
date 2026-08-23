@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.IO;
-using System.Text;
 using System.Windows;
 
 namespace Cleaner;
@@ -14,7 +13,9 @@ public partial class MainWindow : Window
     private IReadOnlyList<string> _selectedDriveRoots;
     private int _minimumFileAgeHours;
     private CancellationTokenSource? _scanCancellation;
+    private CancellationTokenSource? _cleanupCancellation;
     private ScanResult? _lastScan;
+    private static readonly TimeSpan MaximumScanAge = TimeSpan.FromMinutes(5);
 
     public MainWindow()
     {
@@ -110,24 +111,28 @@ public partial class MainWindow : Window
             return;
         }
 
-        var details = new StringBuilder();
-        details.AppendLine($"Пользовательский Temp: {FormatBytes(_lastScan.UserTempBytes)} ({_lastScan.UserTempFiles.Count:N0} файлов)");
-        details.AppendLine($"Системный Temp: {FormatBytes(_lastScan.WindowsTempBytes)} ({_lastScan.WindowsTempFiles.Count:N0} файлов)");
-        details.AppendLine($"Корзина: {FormatBytes(_lastScan.RecycleBin.Bytes)} ({_lastScan.RecycleBin.Items:N0} объектов)");
-        details.AppendLine();
-        details.AppendLine("Примеры найденных файлов:");
-        foreach (var file in _lastScan.UserTempFiles.Concat(_lastScan.WindowsTempFiles).Take(8))
-        {
-            details.AppendLine($"• {file.Path}");
-        }
-
-        MessageBox.Show(details.ToString(), "Детали сканирования", MessageBoxButton.OK, MessageBoxImage.Information);
+        new ScanDetailsWindow(_lastScan) { Owner = this }.ShowDialog();
     }
 
     private async void CleanButton_Click(object sender, RoutedEventArgs e)
     {
+        if (_cleanupCancellation is not null)
+        {
+            _cleanupCancellation.Cancel();
+            CleanButton.IsEnabled = false;
+            CleanButton.Content = "Отмена...";
+            return;
+        }
+
         if (_lastScan is null)
         {
+            return;
+        }
+
+        if (!_lastScan.IsFresh(MaximumScanAge, DateTimeOffset.Now))
+        {
+            InvalidateScan("Результат устарел", "Для безопасной очистки запустите новую проверку.");
+            MessageBox.Show("Результат проверки старше пяти минут. Чтобы не удалить данные, появившиеся позже, выполните новую проверку.", "Нужна новая проверка", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
 
@@ -163,24 +168,31 @@ public partial class MainWindow : Window
             return;
         }
 
-        CleanButton.IsEnabled = false;
+        _cleanupCancellation = new CancellationTokenSource();
+        CleanButton.IsEnabled = true;
         ScanButton.IsEnabled = false;
-        CleanButton.Content = "Очищаем...";
+        CleanButton.Content = "Отменить очистку";
         ScanProgressBar.Visibility = Visibility.Visible;
+        StatusText.Text = "Идёт очистка";
+        StatusDetails.Text = "Удаляем только файлы из только что проверенного списка";
+        var progress = new Progress<CleanupProgress>(update =>
+        {
+            StatusDetails.Text = $"{update.Stage}: удалено {update.DeletedFiles:N0}, пропущено {update.SkippedFiles:N0} ({FormatBytes(update.ReclaimedBytes)})";
+        });
         try
         {
-            var cleanup = await _scanService.DeleteAsync(_lastScan, _selectedDriveRoots, deleteUserTemp, deleteWindowsTemp, deleteRecycleBin, _minimumFileAgeHours);
+            var cleanup = await _scanService.DeleteAsync(_lastScan, _selectedDriveRoots, deleteUserTemp, deleteWindowsTemp, deleteRecycleBin, _minimumFileAgeHours, _cleanupCancellation.Token, progress);
             var scopes = new List<string>();
             if (deleteUserTemp) scopes.Add("Пользовательский Temp");
             if (deleteWindowsTemp) scopes.Add("Системный Temp");
             if (deleteRecycleBin) scopes.Add("Корзина");
             var scope = string.Join(", ", scopes);
-            _historyService.Append(new CleanupHistoryEntry(DateTimeOffset.Now, scope, cleanup.DeletedFiles, cleanup.ReclaimedBytes));
+            var historySaved = _historyService.Append(new CleanupHistoryEntry(DateTimeOffset.Now, scope, cleanup.DeletedFiles, cleanup.ReclaimedBytes));
             StatusText.Text = cleanup.DeletedFiles == 0 ? "Нечего удалить" : "Очистка завершена";
             StatusDetails.Text = $"Удалено: {cleanup.DeletedFiles:N0}, пропущено: {cleanup.SkippedFiles:N0}";
             ActivityText.Text = "Очистка выполнена только что";
             ActivityResultText.Text = $"Удалено файлов: {cleanup.DeletedFiles:N0}";
-            ActivitySizeText.Text = $"Освобождено {FormatBytes(cleanup.ReclaimedBytes)} · пропущено: {cleanup.SkippedFiles:N0}";
+            ActivitySizeText.Text = $"Освобождено {FormatBytes(cleanup.ReclaimedBytes)} · пропущено: {cleanup.SkippedFiles:N0}" + (historySaved ? string.Empty : ". История не сохранена");
             _lastScan = null;
             DetailsButton.IsEnabled = false;
             UserTempValue.Text = "—";
@@ -191,13 +203,41 @@ public partial class MainWindow : Window
             RecycleBinSubtitle.Text = "Требуется повторная проверка";
             UpdateFreeSpaceIndicator();
         }
+        catch (OperationCanceledException)
+        {
+            StatusText.Text = "Очистка отменена";
+            StatusDetails.Text = "Уже удалённые файлы не восстанавливаются; выполните новую проверку для точных данных.";
+            ActivityText.Text = "Очистка отменена пользователем";
+            ActivityResultText.Text = "Данные удалялись только до момента отмены";
+            _lastScan = null;
+            DetailsButton.IsEnabled = false;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            AppLogService.Write("Ошибка очистки", exception);
+            StatusText.Text = "Очистка завершилась с ошибкой";
+            StatusDetails.Text = "Часть данных могла быть удалена. Выполните новую проверку.";
+            _lastScan = null;
+            DetailsButton.IsEnabled = false;
+        }
         finally
         {
+            _cleanupCancellation.Dispose();
+            _cleanupCancellation = null;
             CleanButton.IsEnabled = false;
             CleanButton.Content = "Очистить выбранное";
             ScanProgressBar.Visibility = Visibility.Collapsed;
             ScanButton.IsEnabled = true;
         }
+    }
+
+    private void InvalidateScan(string status, string details)
+    {
+        _lastScan = null;
+        CleanButton.IsEnabled = false;
+        DetailsButton.IsEnabled = false;
+        StatusText.Text = status;
+        StatusDetails.Text = details;
     }
 
     private static string FormatBytes(long bytes)
@@ -220,7 +260,10 @@ public partial class MainWindow : Window
         if (dialog.ShowDialog() == true)
         {
             _selectedDriveRoots = dialog.SelectedDrives;
-            _settingsService.SaveSelectedDrives(_selectedDriveRoots);
+            if (!_settingsService.SaveSelectedDrives(_selectedDriveRoots))
+            {
+                MessageBox.Show("Выбор дисков применён для текущего запуска, но не сохранён. Проверьте доступ к папке данных Cleaner.", "Cleaner", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
             DriveButton.Content = $"Диски: {_selectedDriveRoots.Count} · системный {WindowsDriveService.GetSystemDriveRoot().TrimEnd('\\')}";
             _lastScan = null;
             CleanButton.IsEnabled = false;
@@ -247,14 +290,17 @@ public partial class MainWindow : Window
         if (dialog.ShowDialog() == true)
         {
             _minimumFileAgeHours = dialog.MinimumFileAgeHours;
-            _policyService.SaveMinimumAgeHours(_minimumFileAgeHours);
+            if (!_policyService.SaveMinimumAgeHours(_minimumFileAgeHours))
+            {
+                MessageBox.Show("Режим применён для текущего запуска, но не сохранён. Проверьте доступ к папке данных Cleaner.", "Cleaner", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
         }
     }
 
     private void HelpNavigation_Click(object sender, RoutedEventArgs e)
     {
         MessageBox.Show(
-            "1. Нажмите «Начать проверку».\n2. При необходимости выберите диски.\n3. Отметьте категории очистки.\n4. Откройте детали и нажмите «Очистить выбранное».\n5. Подтвердите удаление.\n\nЗанятые и недоступные файлы пропускаются.",
+            "1. Нажмите «Начать проверку».\n2. При необходимости выберите диски.\n3. Отметьте категории очистки.\n4. Откройте детали и нажмите «Очистить выбранное».\n5. Подтвердите удаление.\n\nРезультат действует пять минут. Занятые, недоступные и связанные с другими местами файлы пропускаются. Для системных файлов Windows может потребоваться запуск от имени администратора.",
             "Как пользоваться Cleaner",
             MessageBoxButton.OK,
             MessageBoxImage.Information);

@@ -37,15 +37,16 @@ public sealed class CleanupPolicyService
         catch (KeyNotFoundException) { return 0; }
     }
 
-    public void SaveMinimumAgeHours(int hours)
+    public bool SaveMinimumAgeHours(int hours)
     {
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(_policyPath)!);
             var value = new { minimumAgeHours = Math.Clamp(hours, 0, 168) };
             File.WriteAllText(_policyPath, JsonSerializer.Serialize(value, new JsonSerializerOptions { WriteIndented = true }));
+            return true;
         }
-        catch (IOException) { }
-        catch (UnauthorizedAccessException) { }
+        catch (IOException) { return false; }
+        catch (UnauthorizedAccessException) { return false; }
     }
 }

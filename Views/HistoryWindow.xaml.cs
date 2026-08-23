@@ -37,8 +37,14 @@ public partial class HistoryWindow : Window
         var result = MessageBox.Show("Удалить всю историю очисток? Настройки приложения останутся без изменений.", "Очистить историю", MessageBoxButton.YesNo, MessageBoxImage.Warning);
         if (result == MessageBoxResult.Yes)
         {
-            _historyService.Clear();
-            Reload();
+            if (_historyService.Clear())
+            {
+                Reload();
+            }
+            else
+            {
+                MessageBox.Show("Не удалось очистить историю. Закройте программы, которые могут использовать файл, и повторите попытку.", "Cleaner", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
     }
 

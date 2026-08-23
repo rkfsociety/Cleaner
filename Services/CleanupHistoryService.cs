@@ -51,7 +51,7 @@ public sealed class CleanupHistoryService
         catch (UnauthorizedAccessException) { return []; }
     }
 
-    public void Append(CleanupHistoryEntry entry)
+    public bool Append(CleanupHistoryEntry entry)
     {
         try
         {
@@ -65,13 +65,14 @@ public sealed class CleanupHistoryService
             var recent = entries.OrderByDescending(item => item.Timestamp).Take(MaxEntries).ToList();
             Directory.CreateDirectory(Path.GetDirectoryName(_historyPath)!);
             File.WriteAllText(_historyPath, JsonSerializer.Serialize(recent, JsonOptions));
+            return true;
         }
-        catch (JsonException) { }
-        catch (IOException) { }
-        catch (UnauthorizedAccessException) { }
+        catch (JsonException) { return false; }
+        catch (IOException) { return false; }
+        catch (UnauthorizedAccessException) { return false; }
     }
 
-    public void Clear()
+    public bool Clear()
     {
         try
         {
@@ -79,8 +80,10 @@ public sealed class CleanupHistoryService
             {
                 File.Delete(_historyPath);
             }
+
+            return true;
         }
-        catch (IOException) { }
-        catch (UnauthorizedAccessException) { }
+        catch (IOException) { return false; }
+        catch (UnauthorizedAccessException) { return false; }
     }
 }

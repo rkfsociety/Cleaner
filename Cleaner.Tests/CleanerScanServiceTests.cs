@@ -107,6 +107,65 @@ public class CleanerScanServiceTests
         Assert.Equal(1, result.SkippedFiles);
     }
 
+    [Fact]
+    public void DeleteFiles_HonorsCancellationBeforeDeleting()
+    {
+        using var scope = new TempScope();
+        var root = scope.CreateSubdirectory("allowed");
+        var first = Path.Combine(root, "first.tmp");
+        var second = Path.Combine(root, "second.tmp");
+        File.WriteAllBytes(first, new byte[1]);
+        File.WriteAllBytes(second, new byte[1]);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        Assert.Throws<OperationCanceledException>(() => CleanerScanService.DeleteFiles(
+            [new ScanFile(first, 1), new ScanFile(second, 1)], [root], 0, cancellation.Token));
+        Assert.True(File.Exists(first));
+        Assert.True(File.Exists(second));
+    }
+
+    [Fact]
+    public void DeleteFiles_ReportsActualCleanupProgress()
+    {
+        using var scope = new TempScope();
+        var root = scope.CreateSubdirectory("allowed");
+        var filePath = Path.Combine(root, "a.tmp");
+        File.WriteAllBytes(filePath, new byte[8]);
+        var progress = new ProgressCollector<CleanupProgress>();
+
+        CleanerScanService.DeleteFiles([new ScanFile(filePath, 8)], [root], 0, CancellationToken.None, progress, "Тест");
+
+        var final = Assert.Single(progress.Values);
+        Assert.Equal("Тест", final.Stage);
+        Assert.Equal(1, final.DeletedFiles);
+        Assert.Equal(8, final.ReclaimedBytes);
+    }
+
+    [Fact]
+    public void IsSafePathForDeletion_AcceptsRegularFileInsideAllowedRoot()
+    {
+        using var scope = new TempScope();
+        var root = scope.CreateSubdirectory("allowed");
+        var filePath = Path.Combine(root, "a.tmp");
+        File.WriteAllBytes(filePath, [1]);
+
+        var safe = CleanerScanService.IsSafePathForDeletion(
+            Path.GetFullPath(filePath),
+            [Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar]);
+
+        Assert.True(safe);
+    }
+
+    [Fact]
+    public void ScanResult_ExpiresAfterConfiguredInterval()
+    {
+        var scannedAt = DateTimeOffset.Now.AddMinutes(-6);
+        var result = new ScanResult([], [], new RecycleBinInfo(0, 0), scannedAt);
+
+        Assert.False(result.IsFresh(TimeSpan.FromMinutes(5), DateTimeOffset.Now));
+    }
+
     private sealed class TempScope : IDisposable
     {
         private readonly string _root = Path.Combine(Path.GetTempPath(), $"cleaner-test-{Guid.NewGuid():N}");
@@ -137,5 +196,12 @@ public class CleanerScanServiceTests
                 Directory.Delete(_root, recursive: true);
             }
         }
+    }
+
+    private sealed class ProgressCollector<T> : IProgress<T>
+    {
+        public List<T> Values { get; } = [];
+
+        public void Report(T value) => Values.Add(value);
     }
 }

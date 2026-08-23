@@ -5,13 +5,16 @@ namespace Cleaner;
 public sealed record ScanFile(string Path, long Bytes);
 public sealed record CleanupResult(int DeletedFiles, int SkippedFiles, long ReclaimedBytes);
 public sealed record ScanProgress(string Stage, int FilesFound, long BytesFound);
+public sealed record CleanupProgress(string Stage, int DeletedFiles, int SkippedFiles, long ReclaimedBytes);
 
-public sealed record ScanResult(IReadOnlyList<ScanFile> UserTempFiles, IReadOnlyList<ScanFile> WindowsTempFiles, RecycleBinInfo RecycleBin)
+public sealed record ScanResult(IReadOnlyList<ScanFile> UserTempFiles, IReadOnlyList<ScanFile> WindowsTempFiles, RecycleBinInfo RecycleBin, DateTimeOffset ScannedAt)
 {
     public long UserTempBytes => UserTempFiles.Sum(file => file.Bytes);
     public long WindowsTempBytes => WindowsTempFiles.Sum(file => file.Bytes);
     public long TotalBytes => UserTempBytes + WindowsTempBytes + RecycleBin.Bytes;
     public int TotalFiles => UserTempFiles.Count + WindowsTempFiles.Count + RecycleBin.Items;
+
+    public bool IsFresh(TimeSpan maximumAge, DateTimeOffset now) => now - ScannedAt <= maximumAge;
 }
 
 public sealed class CleanerScanService
@@ -24,11 +27,11 @@ public sealed class CleanerScanService
             var userTemp = ScanMany(BuildUserCleanupRoots(drives), "Временные файлы и кэш пользователя", cancellationToken, progress);
             var windowsTemp = ScanMany(BuildWindowsTempRoots(drives), "Системные временные файлы", cancellationToken, progress);
             progress?.Report(new ScanProgress("Корзина", userTemp.Count + windowsTemp.Count, userTemp.Sum(file => file.Bytes) + windowsTemp.Sum(file => file.Bytes)));
-            return new ScanResult(userTemp, windowsTemp, new RecycleBinService().GetInfo(drives));
+            return new ScanResult(userTemp, windowsTemp, new RecycleBinService().GetInfo(drives), DateTimeOffset.Now);
         }, cancellationToken);
     }
 
-    public Task<CleanupResult> DeleteAsync(ScanResult result, IEnumerable<string> selectedDrives, bool deleteUserTemp, bool deleteWindowsTemp, bool deleteRecycleBin, int minimumAgeHours, CancellationToken cancellationToken = default)
+    public Task<CleanupResult> DeleteAsync(ScanResult result, IEnumerable<string> selectedDrives, bool deleteUserTemp, bool deleteWindowsTemp, bool deleteRecycleBin, int minimumAgeHours, CancellationToken cancellationToken = default, IProgress<CleanupProgress>? progress = null)
     {
         return Task.Run(() =>
         {
@@ -38,7 +41,7 @@ public sealed class CleanerScanService
             long reclaimed = 0;
             if (deleteUserTemp)
             {
-                var stats = DeleteFiles(result.UserTempFiles, BuildUserCleanupRoots(drives), minimumAgeHours, cancellationToken);
+                var stats = DeleteFiles(result.UserTempFiles, BuildUserCleanupRoots(drives), minimumAgeHours, cancellationToken, progress, "Временные файлы и кэш пользователя", deleted, skipped, reclaimed);
                 deleted += stats.DeletedFiles;
                 skipped += stats.SkippedFiles;
                 reclaimed += stats.ReclaimedBytes;
@@ -46,7 +49,7 @@ public sealed class CleanerScanService
 
             if (deleteWindowsTemp)
             {
-                var stats = DeleteFiles(result.WindowsTempFiles, BuildWindowsTempRoots(drives), minimumAgeHours, cancellationToken);
+                var stats = DeleteFiles(result.WindowsTempFiles, BuildWindowsTempRoots(drives), minimumAgeHours, cancellationToken, progress, "Системные временные файлы", deleted, skipped, reclaimed);
                 deleted += stats.DeletedFiles;
                 skipped += stats.SkippedFiles;
                 reclaimed += stats.ReclaimedBytes;
@@ -56,9 +59,10 @@ public sealed class CleanerScanService
             {
                 var recycleBinService = new RecycleBinService();
                 var beforeEmpty = recycleBinService.GetInfoPerRoot(drives);
-                var emptyResults = recycleBinService.EmptyPerRoot(drives);
-                foreach (var (root, succeeded) in emptyResults)
+                foreach (var root in drives)
                 {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    var succeeded = recycleBinService.Empty(root);
                     var info = beforeEmpty.TryGetValue(root, out var value) ? value : new RecycleBinInfo(0, 0);
                     if (succeeded)
                     {
@@ -69,6 +73,8 @@ public sealed class CleanerScanService
                     {
                         skipped += info.Items;
                     }
+
+                    progress?.Report(new CleanupProgress("Корзина", deleted, skipped, reclaimed));
                 }
             }
 
@@ -226,7 +232,7 @@ public sealed class CleanerScanService
         return files;
     }
 
-    internal static CleanupResult DeleteFiles(IEnumerable<ScanFile> files, IEnumerable<string> roots, int minimumAgeHours, CancellationToken cancellationToken)
+    internal static CleanupResult DeleteFiles(IEnumerable<ScanFile> files, IEnumerable<string> roots, int minimumAgeHours, CancellationToken cancellationToken, IProgress<CleanupProgress>? progress = null, string stage = "Очистка", int deletedBefore = 0, int skippedBefore = 0, long reclaimedBefore = 0)
     {
         var fullRoots = roots
             .Select(root => Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar)
@@ -240,7 +246,7 @@ public sealed class CleanerScanService
             try
             {
                 var fullPath = Path.GetFullPath(file.Path);
-                if (!fullRoots.Any(root => fullPath.StartsWith(root, StringComparison.OrdinalIgnoreCase)) || !File.Exists(fullPath))
+                if (!fullRoots.Any(root => fullPath.StartsWith(root, StringComparison.OrdinalIgnoreCase)) || !File.Exists(fullPath) || !IsSafePathForDeletion(fullPath, fullRoots))
                 {
                     skipped++;
                     continue;
@@ -258,8 +264,47 @@ public sealed class CleanerScanService
             }
             catch (UnauthorizedAccessException) { skipped++; }
             catch (IOException) { skipped++; }
+
+            if ((deleted + skipped) % 32 == 0)
+            {
+                progress?.Report(new CleanupProgress(stage, deletedBefore + deleted, skippedBefore + skipped, reclaimedBefore + reclaimed));
+            }
         }
 
+        progress?.Report(new CleanupProgress(stage, deletedBefore + deleted, skippedBefore + skipped, reclaimedBefore + reclaimed));
         return new CleanupResult(deleted, skipped, reclaimed);
+    }
+
+    internal static bool IsSafePathForDeletion(string fullPath, IEnumerable<string> fullRoots)
+    {
+        var root = fullRoots.FirstOrDefault(candidate => fullPath.StartsWith(candidate, StringComparison.OrdinalIgnoreCase));
+        if (root is null)
+        {
+            return false;
+        }
+
+        try
+        {
+            var current = Path.GetDirectoryName(fullPath);
+            while (!string.IsNullOrEmpty(current))
+            {
+                if (File.GetAttributes(current).HasFlag(FileAttributes.ReparsePoint))
+                {
+                    return false;
+                }
+
+                var normalizedCurrent = current.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+                if (string.Equals(normalizedCurrent, root, StringComparison.OrdinalIgnoreCase))
+                {
+                    break;
+                }
+
+                current = Path.GetDirectoryName(current);
+            }
+
+            return !File.GetAttributes(fullPath).HasFlag(FileAttributes.ReparsePoint);
+        }
+        catch (IOException) { return false; }
+        catch (UnauthorizedAccessException) { return false; }
     }
 }

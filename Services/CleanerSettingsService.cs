@@ -48,14 +48,15 @@ public sealed class CleanerSettingsService
         catch (UnauthorizedAccessException) { return [defaultDrive]; }
     }
 
-    public void SaveSelectedDrives(IEnumerable<string> drives)
+    public bool SaveSelectedDrives(IEnumerable<string> drives)
     {
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(_settingsPath)!);
             File.WriteAllText(_settingsPath, JsonSerializer.Serialize(drives.Distinct(StringComparer.OrdinalIgnoreCase).ToArray()));
+            return true;
         }
-        catch (IOException) { }
-        catch (UnauthorizedAccessException) { }
+        catch (IOException) { return false; }
+        catch (UnauthorizedAccessException) { return false; }
     }
 }

@@ -1,0 +1,27 @@
+<Window x:Class="Cleaner.ScanDetailsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Детали проверки" Width="860" Height="620" WindowStartupLocation="CenterOwner"
+        Background="#F7F8FC" FontFamily="Segoe UI">
+    <Grid Margin="22">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+        <StackPanel>
+            <TextBlock Text="Найденные данные" FontSize="22" FontWeight="SemiBold" Foreground="#192033" />
+            <TextBlock x:Name="SummaryText" Margin="0,5,0,14" Foreground="#7D8497" TextWrapping="Wrap" />
+        </StackPanel>
+        <ListView x:Name="FilesList" Grid.Row="1" Background="White" BorderBrush="#E8EAF1" BorderThickness="1">
+            <ListView.View>
+                <GridView>
+                    <GridViewColumn Header="Категория" DisplayMemberBinding="{Binding Category}" Width="190" />
+                    <GridViewColumn Header="Размер" DisplayMemberBinding="{Binding Size}" Width="90" />
+                    <GridViewColumn Header="Путь" DisplayMemberBinding="{Binding Path}" Width="520" />
+                </GridView>
+            </ListView.View>
+        </ListView>
+        <Button Grid.Row="2" Content="Закрыть" IsDefault="True" Width="110" Height="34" HorizontalAlignment="Right" Margin="0,16,0,0" Click="CloseButton_Click" />
+    </Grid>
+</Window>
