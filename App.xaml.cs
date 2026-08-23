@@ -10,4 +10,3 @@ namespace Cleaner;
 public partial class App : Application
 {
 }
-
