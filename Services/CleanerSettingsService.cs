@@ -5,10 +5,19 @@ namespace Cleaner;
 
 public sealed class CleanerSettingsService
 {
-    private readonly string _settingsPath = Path.Combine(
+    private readonly string _settingsPath;
+
+    public CleanerSettingsService() : this(Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "Cleaner",
-        "settings.json");
+        "settings.json"))
+    {
+    }
+
+    internal CleanerSettingsService(string settingsPath)
+    {
+        _settingsPath = settingsPath;
+    }
 
     public IReadOnlyList<string> LoadSelectedDrives(IReadOnlyList<string> availableDrives)
     {

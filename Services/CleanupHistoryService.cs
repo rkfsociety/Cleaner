@@ -8,10 +8,19 @@ public sealed record CleanupHistoryEntry(DateTimeOffset Timestamp, string Scope,
 public sealed class CleanupHistoryService
 {
     private const int MaxEntries = 20;
-    private readonly string _historyPath = Path.Combine(
+    private readonly string _historyPath;
+
+    public CleanupHistoryService() : this(Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "Cleaner",
-        "history.json");
+        "history.json"))
+    {
+    }
+
+    internal CleanupHistoryService(string historyPath)
+    {
+        _historyPath = historyPath;
+    }
 
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 

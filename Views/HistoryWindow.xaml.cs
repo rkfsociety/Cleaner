@@ -48,19 +48,7 @@ public partial class HistoryWindow : Window
         }
     }
 
-    private static string FormatBytes(long bytes)
-    {
-        string[] units = ["Б", "КБ", "МБ", "ГБ", "ТБ"];
-        var value = (double)bytes;
-        var unit = 0;
-        while (value >= 1024 && unit < units.Length - 1)
-        {
-            value /= 1024;
-            unit++;
-        }
-
-        return $"{value:0.#} {units[unit]}";
-    }
+    private static string FormatBytes(long bytes) => ByteSizeFormatter.Format(bytes);
 
     private sealed record HistoryRow(string Date, string Scope, string DeletedFiles, string Reclaimed);
 }

@@ -34,6 +34,15 @@ public partial class MainWindow : Window
         DriveButton.Content = $"Диски: {_selectedDriveRoots.Count} · системный {WindowsDriveService.GetSystemDriveRoot().TrimEnd('\\')}";
         UpdateFreeSpaceIndicator();
         RestoreLatestActivity();
+        if (App.IsSystemCleanupSession)
+        {
+            UserTempCheckBox.IsChecked = false;
+            UserTempCheckBox.IsEnabled = false;
+            RecycleBinCheckBox.IsChecked = false;
+            RecycleBinCheckBox.IsEnabled = false;
+            StatusText.Text = "Системная очистка";
+            StatusDetails.Text = "Открыта повышенная сессия только для системного Temp";
+        }
     }
 
     private async void ScanButton_Click(object sender, RoutedEventArgs e)
@@ -145,6 +154,28 @@ public partial class MainWindow : Window
             return;
         }
 
+        if (deleteWindowsTemp && !App.IsAdministrator)
+        {
+            var elevation = MessageBox.Show("Для системного Temp нужна отдельная повышенная сессия. Cleaner перезапустится в режиме только системной очистки; после запуска повторите проверку.", "Нужны права администратора", MessageBoxButton.YesNo, MessageBoxImage.Information);
+            if (elevation == MessageBoxResult.Yes && !App.RestartForSystemCleanup())
+            {
+                MessageBox.Show("Не удалось получить права администратора. Системные файлы останутся без изменений.", "Cleaner", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+
+            return;
+        }
+
+        if (deleteRecycleBin)
+        {
+            var currentRecycleBin = await Task.Run(() => _scanService.GetRecycleBinInfo(_selectedDriveRoots));
+            if (CleanerScanService.HasRecycleBinChanged(_lastScan.RecycleBin, currentRecycleBin))
+            {
+                InvalidateScan("Корзина изменилась", "Для безопасной очистки запустите новую проверку.");
+                MessageBox.Show("Содержимое корзины изменилось после проверки. Чтобы не удалить новые данные без отдельного подтверждения, выполните новую проверку.", "Нужна новая проверка", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+        }
+
         var selectedBytes = (deleteUserTemp ? _lastScan.UserTempBytes : 0) +
             (deleteWindowsTemp ? _lastScan.WindowsTempBytes : 0) +
             (deleteRecycleBin ? _lastScan.RecycleBin.Bytes : 0);
@@ -240,19 +271,7 @@ public partial class MainWindow : Window
         StatusDetails.Text = details;
     }
 
-    private static string FormatBytes(long bytes)
-    {
-        string[] units = ["Б", "КБ", "МБ", "ГБ", "ТБ"];
-        var value = (double)bytes;
-        var unit = 0;
-        while (value >= 1024 && unit < units.Length - 1)
-        {
-            value /= 1024;
-            unit++;
-        }
-
-        return $"{value:0.#} {units[unit]}";
-    }
+    private static string FormatBytes(long bytes) => ByteSizeFormatter.Format(bytes);
 
     private void DriveButton_Click(object sender, RoutedEventArgs e)
     {

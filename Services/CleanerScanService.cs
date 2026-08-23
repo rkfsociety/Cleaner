@@ -19,6 +19,20 @@ public sealed record ScanResult(IReadOnlyList<ScanFile> UserTempFiles, IReadOnly
 
 public sealed class CleanerScanService
 {
+    private readonly IRecycleBinService _recycleBinService;
+
+    public CleanerScanService() : this(new RecycleBinService())
+    {
+    }
+
+    internal CleanerScanService(IRecycleBinService recycleBinService)
+    {
+        _recycleBinService = recycleBinService;
+    }
+
+    public RecycleBinInfo GetRecycleBinInfo(IEnumerable<string> selectedDrives) => _recycleBinService.GetInfo(NormalizeDrives(selectedDrives));
+    internal static bool HasRecycleBinChanged(RecycleBinInfo scanned, RecycleBinInfo current) => scanned != current;
+
     public Task<ScanResult> ScanAsync(IEnumerable<string> selectedDrives, CancellationToken cancellationToken = default, IProgress<ScanProgress>? progress = null)
     {
         return Task.Run(() =>
@@ -27,7 +41,7 @@ public sealed class CleanerScanService
             var userTemp = ScanMany(BuildUserCleanupRoots(drives), "Временные файлы и кэш пользователя", cancellationToken, progress);
             var windowsTemp = ScanMany(BuildWindowsTempRoots(drives), "Системные временные файлы", cancellationToken, progress);
             progress?.Report(new ScanProgress("Корзина", userTemp.Count + windowsTemp.Count, userTemp.Sum(file => file.Bytes) + windowsTemp.Sum(file => file.Bytes)));
-            return new ScanResult(userTemp, windowsTemp, new RecycleBinService().GetInfo(drives), DateTimeOffset.Now);
+            return new ScanResult(userTemp, windowsTemp, GetRecycleBinInfo(drives), DateTimeOffset.Now);
         }, cancellationToken);
     }
 
@@ -57,12 +71,11 @@ public sealed class CleanerScanService
 
             if (deleteRecycleBin)
             {
-                var recycleBinService = new RecycleBinService();
-                var beforeEmpty = recycleBinService.GetInfoPerRoot(drives);
+                var beforeEmpty = _recycleBinService.GetInfoPerRoot(drives);
                 foreach (var root in drives)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    var succeeded = recycleBinService.Empty(root);
+                    var succeeded = _recycleBinService.Empty(root);
                     var info = beforeEmpty.TryGetValue(root, out var value) ? value : new RecycleBinInfo(0, 0);
                     if (succeeded)
                     {
@@ -258,7 +271,12 @@ public sealed class CleanerScanService
                     continue;
                 }
 
-                File.Delete(fullPath);
+                var deletionRoot = fullRoots.First(root => fullPath.StartsWith(root, StringComparison.OrdinalIgnoreCase));
+                if (!WindowsSafeDeleteService.TryDelete(fullPath, deletionRoot))
+                {
+                    skipped++;
+                    continue;
+                }
                 deleted++;
                 reclaimed += file.Bytes;
             }

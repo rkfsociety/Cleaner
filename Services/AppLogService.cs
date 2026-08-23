@@ -21,8 +21,8 @@ internal static class AppLogService
             var path = Path.Combine(directory, "app.log");
             lock (SyncRoot)
             {
-                RollIfNeeded(path);
                 File.AppendAllText(path, line);
+                RollIfNeeded(path);
             }
         }
         catch

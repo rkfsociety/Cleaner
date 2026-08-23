@@ -166,6 +166,30 @@ public class CleanerScanServiceTests
         Assert.False(result.IsFresh(TimeSpan.FromMinutes(5), DateTimeOffset.Now));
     }
 
+    [Fact]
+    public void HasRecycleBinChanged_DetectsNewItemsOrBytes()
+    {
+        Assert.True(CleanerScanService.HasRecycleBinChanged(new RecycleBinInfo(10, 1), new RecycleBinInfo(11, 1)));
+        Assert.True(CleanerScanService.HasRecycleBinChanged(new RecycleBinInfo(10, 1), new RecycleBinInfo(10, 2)));
+        Assert.False(CleanerScanService.HasRecycleBinChanged(new RecycleBinInfo(10, 1), new RecycleBinInfo(10, 1)));
+    }
+
+    [Fact]
+    public async Task DeleteAsync_AccountsForPartialRecycleBinFailure()
+    {
+        var recycleBin = new FakeRecycleBinService(
+            new Dictionary<string, RecycleBinInfo> { ["C:\\"] = new(10, 1), ["D:\\"] = new(20, 2) },
+            new Dictionary<string, bool> { ["C:\\"] = true, ["D:\\"] = false });
+        var service = new CleanerScanService(recycleBin);
+        var scan = new ScanResult([], [], new RecycleBinInfo(30, 3), DateTimeOffset.Now);
+
+        var result = await service.DeleteAsync(scan, ["C:\\", "D:\\"], false, false, true, 0);
+
+        Assert.Equal(1, result.DeletedFiles);
+        Assert.Equal(2, result.SkippedFiles);
+        Assert.Equal(10, result.ReclaimedBytes);
+    }
+
     private sealed class TempScope : IDisposable
     {
         private readonly string _root = Path.Combine(Path.GetTempPath(), $"cleaner-test-{Guid.NewGuid():N}");
@@ -203,5 +227,14 @@ public class CleanerScanServiceTests
         public List<T> Values { get; } = [];
 
         public void Report(T value) => Values.Add(value);
+    }
+
+    private sealed class FakeRecycleBinService(IReadOnlyDictionary<string, RecycleBinInfo> info, IReadOnlyDictionary<string, bool> results) : IRecycleBinService
+    {
+        public RecycleBinInfo GetInfo(IEnumerable<string>? roots = null) => new(info.Values.Sum(value => value.Bytes), info.Values.Sum(value => value.Items));
+
+        public IReadOnlyDictionary<string, RecycleBinInfo> GetInfoPerRoot(IEnumerable<string>? roots = null) => info;
+
+        public bool Empty(string? root) => root is not null && results.TryGetValue(root, out var succeeded) && succeeded;
     }
 }

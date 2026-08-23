@@ -4,7 +4,14 @@ namespace Cleaner;
 
 public sealed record RecycleBinInfo(long Bytes, int Items);
 
-public sealed class RecycleBinService
+public interface IRecycleBinService
+{
+    RecycleBinInfo GetInfo(IEnumerable<string>? roots = null);
+    IReadOnlyDictionary<string, RecycleBinInfo> GetInfoPerRoot(IEnumerable<string>? roots = null);
+    bool Empty(string? root);
+}
+
+public sealed class RecycleBinService : IRecycleBinService
 {
     [StructLayout(LayoutKind.Sequential)]
     private struct QueryInfo
