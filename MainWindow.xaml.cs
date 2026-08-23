@@ -7,6 +7,15 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+
+        var userName = Environment.UserName.Trim();
+        if (string.IsNullOrEmpty(userName))
+        {
+            userName = "пользователь";
+        }
+
+        WelcomeText.Text = $"Добрый день, {userName}";
+        UserInitialText.Text = userName[..1].ToUpperInvariant();
     }
 
     private async void ScanButton_Click(object sender, RoutedEventArgs e)
