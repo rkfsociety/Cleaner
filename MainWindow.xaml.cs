@@ -45,6 +45,8 @@ public partial class MainWindow : Window
             UserTempSubtitle.Text = $"{result.UserTempFiles:N0} файлов";
             WindowsTempValue.Text = FormatBytes(result.WindowsTempBytes);
             WindowsTempSubtitle.Text = $"{result.WindowsTempFiles:N0} файлов";
+            RecycleBinValue.Text = FormatBytes(result.RecycleBin.Bytes);
+            RecycleBinSubtitle.Text = $"{result.RecycleBin.Items:N0} объектов";
             ActivityText.Text = "Проверка завершена только что";
             ActivityResultText.Text = $"Найдено файлов: {result.TotalFiles:N0}";
             ActivitySizeText.Text = "Выберите категории и подтвердите очистку";
@@ -76,6 +78,7 @@ public partial class MainWindow : Window
         var details = new StringBuilder();
         details.AppendLine($"Пользовательский Temp: {FormatBytes(_lastScan.UserTempBytes)} ({_lastScan.UserTempFiles.Count:N0} файлов)");
         details.AppendLine($"Системный Temp: {FormatBytes(_lastScan.WindowsTempBytes)} ({_lastScan.WindowsTempFiles.Count:N0} файлов)");
+        details.AppendLine($"Корзина: {FormatBytes(_lastScan.RecycleBin.Bytes)} ({_lastScan.RecycleBin.Items:N0} объектов)");
         details.AppendLine();
         details.AppendLine("Примеры найденных файлов:");
         foreach (var file in _lastScan.UserTempFiles.Concat(_lastScan.WindowsTempFiles).Take(8))
@@ -95,14 +98,15 @@ public partial class MainWindow : Window
 
         var deleteUserTemp = UserTempCheckBox.IsChecked == true;
         var deleteWindowsTemp = WindowsTempCheckBox.IsChecked == true;
-        if (!deleteUserTemp && !deleteWindowsTemp)
+        var deleteRecycleBin = RecycleBinCheckBox.IsChecked == true;
+        if (!deleteUserTemp && !deleteWindowsTemp && !deleteRecycleBin)
         {
             MessageBox.Show("Выберите хотя бы одну категорию для очистки.", "Cleaner", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
 
         var confirmation = MessageBox.Show(
-            "Удалить выбранные временные файлы? Занятые и недоступные файлы будут пропущены.",
+            "Удалить выбранные данные? Занятые и недоступные файлы будут пропущены.",
             "Подтверждение очистки",
             MessageBoxButton.YesNo,
             MessageBoxImage.Warning);
@@ -116,12 +120,15 @@ public partial class MainWindow : Window
         CleanButton.Content = "Очищаем...";
         try
         {
-            var deleted = await _scanService.DeleteAsync(_lastScan, deleteUserTemp, deleteWindowsTemp);
+            var deleted = await _scanService.DeleteAsync(_lastScan, deleteUserTemp, deleteWindowsTemp, deleteRecycleBin);
             var selectedBytes = (deleteUserTemp ? _lastScan.UserTempBytes : 0) +
-                (deleteWindowsTemp ? _lastScan.WindowsTempBytes : 0);
-            var scope = deleteUserTemp && deleteWindowsTemp
-                ? "Пользовательский и системный Temp"
-                : deleteUserTemp ? "Пользовательский Temp" : "Системный Temp";
+                (deleteWindowsTemp ? _lastScan.WindowsTempBytes : 0) +
+                (deleteRecycleBin ? _lastScan.RecycleBin.Bytes : 0);
+            var scopes = new List<string>();
+            if (deleteUserTemp) scopes.Add("Пользовательский Temp");
+            if (deleteWindowsTemp) scopes.Add("Системный Temp");
+            if (deleteRecycleBin) scopes.Add("Корзина");
+            var scope = string.Join(", ", scopes);
             _historyService.Append(new CleanupHistoryEntry(DateTimeOffset.Now, scope, deleted, selectedBytes));
             StatusText.Text = deleted == 0 ? "Нечего удалить" : "Очистка завершена";
             StatusDetails.Text = $"Удалено файлов: {deleted:N0}";
@@ -132,8 +139,10 @@ public partial class MainWindow : Window
             DetailsButton.IsEnabled = false;
             UserTempValue.Text = "0 Б";
             WindowsTempValue.Text = "0 Б";
+            RecycleBinValue.Text = "0 Б";
             UserTempSubtitle.Text = "Требуется повторная проверка";
             WindowsTempSubtitle.Text = "Требуется повторная проверка";
+            RecycleBinSubtitle.Text = "Требуется повторная проверка";
         }
         finally
         {

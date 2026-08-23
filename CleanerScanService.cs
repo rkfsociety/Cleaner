@@ -4,12 +4,12 @@ namespace Cleaner;
 
 public sealed record ScanFile(string Path, long Bytes);
 
-public sealed record ScanResult(IReadOnlyList<ScanFile> UserTempFiles, IReadOnlyList<ScanFile> WindowsTempFiles)
+public sealed record ScanResult(IReadOnlyList<ScanFile> UserTempFiles, IReadOnlyList<ScanFile> WindowsTempFiles, RecycleBinInfo RecycleBin)
 {
     public long UserTempBytes => UserTempFiles.Sum(file => file.Bytes);
     public long WindowsTempBytes => WindowsTempFiles.Sum(file => file.Bytes);
-    public long TotalBytes => UserTempBytes + WindowsTempBytes;
-    public int TotalFiles => UserTempFiles.Count + WindowsTempFiles.Count;
+    public long TotalBytes => UserTempBytes + WindowsTempBytes + RecycleBin.Bytes;
+    public int TotalFiles => UserTempFiles.Count + WindowsTempFiles.Count + RecycleBin.Items;
 }
 
 public sealed class CleanerScanService
@@ -18,10 +18,11 @@ public sealed class CleanerScanService
     {
         return Task.Run(() => new ScanResult(
             ScanDirectory(Path.GetTempPath(), cancellationToken),
-            ScanDirectory(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "Temp"), cancellationToken)), cancellationToken);
+            ScanDirectory(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "Temp"), cancellationToken),
+            new RecycleBinService().GetInfo()), cancellationToken);
     }
 
-    public Task<int> DeleteAsync(ScanResult result, bool deleteUserTemp, bool deleteWindowsTemp, CancellationToken cancellationToken = default)
+    public Task<int> DeleteAsync(ScanResult result, bool deleteUserTemp, bool deleteWindowsTemp, bool deleteRecycleBin, CancellationToken cancellationToken = default)
     {
         return Task.Run(() =>
         {
@@ -34,6 +35,11 @@ public sealed class CleanerScanService
             if (deleteWindowsTemp)
             {
                 deleted += DeleteFiles(result.WindowsTempFiles, Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "Temp"), cancellationToken);
+            }
+
+            if (deleteRecycleBin && result.RecycleBin.Items > 0 && new RecycleBinService().Empty())
+            {
+                deleted += result.RecycleBin.Items;
             }
 
             return deleted;
