@@ -26,7 +26,7 @@ public sealed class CleanerScanService
         }, cancellationToken);
     }
 
-    public Task<CleanupResult> DeleteAsync(ScanResult result, IEnumerable<string> selectedDrives, bool deleteUserTemp, bool deleteWindowsTemp, bool deleteRecycleBin, CancellationToken cancellationToken = default)
+    public Task<CleanupResult> DeleteAsync(ScanResult result, IEnumerable<string> selectedDrives, bool deleteUserTemp, bool deleteWindowsTemp, bool deleteRecycleBin, int minimumAgeHours, CancellationToken cancellationToken = default)
     {
         return Task.Run(() =>
         {
@@ -36,7 +36,7 @@ public sealed class CleanerScanService
             long reclaimed = 0;
             if (deleteUserTemp)
             {
-                var stats = DeleteFiles(result.UserTempFiles, BuildUserCleanupRoots(drives), cancellationToken);
+                var stats = DeleteFiles(result.UserTempFiles, BuildUserCleanupRoots(drives), minimumAgeHours, cancellationToken);
                 deleted += stats.DeletedFiles;
                 skipped += stats.SkippedFiles;
                 reclaimed += stats.ReclaimedBytes;
@@ -44,7 +44,7 @@ public sealed class CleanerScanService
 
             if (deleteWindowsTemp)
             {
-                var stats = DeleteFiles(result.WindowsTempFiles, BuildWindowsTempRoots(drives), cancellationToken);
+                var stats = DeleteFiles(result.WindowsTempFiles, BuildWindowsTempRoots(drives), minimumAgeHours, cancellationToken);
                 deleted += stats.DeletedFiles;
                 skipped += stats.SkippedFiles;
                 reclaimed += stats.ReclaimedBytes;
@@ -219,7 +219,7 @@ public sealed class CleanerScanService
         return files;
     }
 
-    private static CleanupResult DeleteFiles(IEnumerable<ScanFile> files, IEnumerable<string> roots, CancellationToken cancellationToken)
+    private static CleanupResult DeleteFiles(IEnumerable<ScanFile> files, IEnumerable<string> roots, int minimumAgeHours, CancellationToken cancellationToken)
     {
         var fullRoots = roots
             .Select(root => Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar)
@@ -234,6 +234,12 @@ public sealed class CleanerScanService
             {
                 var fullPath = Path.GetFullPath(file.Path);
                 if (!fullRoots.Any(root => fullPath.StartsWith(root, StringComparison.OrdinalIgnoreCase)) || !File.Exists(fullPath))
+                {
+                    skipped++;
+                    continue;
+                }
+
+                if (minimumAgeHours > 0 && File.GetLastWriteTimeUtc(fullPath) > DateTime.UtcNow.AddHours(-minimumAgeHours))
                 {
                     skipped++;
                     continue;

@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.IO;
-using System.Security.Principal;
 using System.Text;
 using System.Windows;
 
@@ -11,7 +10,9 @@ public partial class MainWindow : Window
     private readonly CleanerScanService _scanService = new();
     private readonly CleanupHistoryService _historyService = new();
     private readonly CleanerSettingsService _settingsService = new();
+    private readonly CleanupPolicyService _policyService = new();
     private IReadOnlyList<string> _selectedDriveRoots;
+    private int _minimumFileAgeHours;
     private CancellationTokenSource? _scanCancellation;
     private ScanResult? _lastScan;
 
@@ -28,6 +29,7 @@ public partial class MainWindow : Window
         WelcomeText.Text = $"Добрый день, {userName}";
         UserInitialText.Text = userName[..1].ToUpperInvariant();
         _selectedDriveRoots = _settingsService.LoadSelectedDrives(GetDefaultDriveRoots());
+        _minimumFileAgeHours = _policyService.LoadMinimumAgeHours();
         DriveButton.Content = $"Диски: {_selectedDriveRoots.Count}";
         UpdateFreeSpaceIndicator();
         RestoreLatestActivity();
@@ -141,9 +143,12 @@ public partial class MainWindow : Window
         var browserWarning = runningBrowsers.Length > 0
             ? $"\n\nЗапущены: {string.Join(", ", runningBrowsers)}. Их занятые файлы кэша будут пропущены."
             : string.Empty;
+        var ageWarning = _minimumFileAgeHours > 0
+            ? $"\nФайлы младше {_minimumFileAgeHours} часов будут пропущены."
+            : string.Empty;
 
         var confirmation = MessageBox.Show(
-            $"Удалить выбранные данные (до {FormatBytes(selectedBytes)})? Занятые и недоступные файлы будут пропущены.{browserWarning}",
+            $"Удалить выбранные данные (до {FormatBytes(selectedBytes)})? Занятые и недоступные файлы будут пропущены.{ageWarning}{browserWarning}",
             "Подтверждение очистки",
             MessageBoxButton.YesNo,
             MessageBoxImage.Warning);
@@ -157,7 +162,7 @@ public partial class MainWindow : Window
         CleanButton.Content = "Очищаем...";
         try
         {
-            var cleanup = await _scanService.DeleteAsync(_lastScan, _selectedDriveRoots, deleteUserTemp, deleteWindowsTemp, deleteRecycleBin);
+            var cleanup = await _scanService.DeleteAsync(_lastScan, _selectedDriveRoots, deleteUserTemp, deleteWindowsTemp, deleteRecycleBin, _minimumFileAgeHours);
             var scopes = new List<string>();
             if (deleteUserTemp) scopes.Add("Пользовательский Temp");
             if (deleteWindowsTemp) scopes.Add("Системный Temp");
@@ -230,13 +235,12 @@ public partial class MainWindow : Window
 
     private void SettingsNavigation_Click(object sender, RoutedEventArgs e)
     {
-        var isAdministrator = new WindowsPrincipal(WindowsIdentity.GetCurrent()).IsInRole(WindowsBuiltInRole.Administrator);
-        var historyPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Cleaner", "history.json");
-        MessageBox.Show(
-            $"Режим администратора: {(isAdministrator ? "включён" : "не включён")}\nВыбрано дисков: {_selectedDriveRoots.Count}\nФайл журнала: {historyPath}",
-            "Настройки Cleaner",
-            MessageBoxButton.OK,
-            MessageBoxImage.Information);
+        var dialog = new SettingsWindow(_minimumFileAgeHours, _selectedDriveRoots.Count) { Owner = this };
+        if (dialog.ShowDialog() == true)
+        {
+            _minimumFileAgeHours = dialog.MinimumFileAgeHours;
+            _policyService.SaveMinimumAgeHours(_minimumFileAgeHours);
+        }
     }
 
     private void HelpNavigation_Click(object sender, RoutedEventArgs e)
