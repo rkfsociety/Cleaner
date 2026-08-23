@@ -32,6 +32,25 @@ public sealed class CleanupHistoryService
         catch (UnauthorizedAccessException) { return null; }
     }
 
+    public IReadOnlyList<CleanupHistoryEntry> LoadAll()
+    {
+        try
+        {
+            if (!File.Exists(_historyPath))
+            {
+                return [];
+            }
+
+            return JsonSerializer.Deserialize<List<CleanupHistoryEntry>>(File.ReadAllText(_historyPath))?
+                .OrderByDescending(entry => entry.Timestamp)
+                .Take(MaxEntries)
+                .ToArray() ?? [];
+        }
+        catch (JsonException) { return []; }
+        catch (IOException) { return []; }
+        catch (UnauthorizedAccessException) { return []; }
+    }
+
     public void Append(CleanupHistoryEntry entry)
     {
         try

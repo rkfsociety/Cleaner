@@ -1,0 +1,21 @@
+<Window x:Class="Cleaner.HistoryWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="История очисток" Width="760" Height="480" ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner" Background="#F7F8FC" FontFamily="Segoe UI">
+    <Border Margin="18" Background="White" CornerRadius="16" Padding="24">
+        <DockPanel>
+            <TextBlock DockPanel.Dock="Top" Text="История очисток" Foreground="#192033" FontSize="22" FontWeight="SemiBold" Margin="0,0,0,18" />
+            <ListView x:Name="HistoryList" BorderThickness="0" Background="Transparent" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                <ListView.View>
+                    <GridView>
+                        <GridViewColumn Header="Дата" DisplayMemberBinding="{Binding Date}" Width="145" />
+                        <GridViewColumn Header="Категории" DisplayMemberBinding="{Binding Scope}" Width="245" />
+                        <GridViewColumn Header="Файлов" DisplayMemberBinding="{Binding DeletedFiles}" Width="90" />
+                        <GridViewColumn Header="Освобождено" DisplayMemberBinding="{Binding Reclaimed}" Width="150" />
+                    </GridView>
+                </ListView.View>
+            </ListView>
+        </DockPanel>
+    </Border>
+</Window>
