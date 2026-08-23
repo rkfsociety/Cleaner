@@ -292,6 +292,11 @@ public partial class MainWindow : Window
         }
     }
 
+    private void ProgramsButton_Click(object sender, RoutedEventArgs e)
+    {
+        new ProgramsWindow { Owner = this }.ShowDialog();
+    }
+
     private void HistoryButton_Click(object sender, RoutedEventArgs e)
     {
         var dialog = new HistoryWindow(_historyService) { Owner = this };
