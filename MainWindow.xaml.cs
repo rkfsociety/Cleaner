@@ -146,21 +146,18 @@ public partial class MainWindow : Window
         CleanButton.Content = "Очищаем...";
         try
         {
-            var deleted = await _scanService.DeleteAsync(_lastScan, _selectedDriveRoots, deleteUserTemp, deleteWindowsTemp, deleteRecycleBin);
-            var selectedBytes = (deleteUserTemp ? _lastScan.UserTempBytes : 0) +
-                (deleteWindowsTemp ? _lastScan.WindowsTempBytes : 0) +
-                (deleteRecycleBin ? _lastScan.RecycleBin.Bytes : 0);
+            var cleanup = await _scanService.DeleteAsync(_lastScan, _selectedDriveRoots, deleteUserTemp, deleteWindowsTemp, deleteRecycleBin);
             var scopes = new List<string>();
             if (deleteUserTemp) scopes.Add("Пользовательский Temp");
             if (deleteWindowsTemp) scopes.Add("Системный Temp");
             if (deleteRecycleBin) scopes.Add("Корзина");
             var scope = string.Join(", ", scopes);
-            _historyService.Append(new CleanupHistoryEntry(DateTimeOffset.Now, scope, deleted, selectedBytes));
-            StatusText.Text = deleted == 0 ? "Нечего удалить" : "Очистка завершена";
-            StatusDetails.Text = $"Удалено файлов: {deleted:N0}";
+            _historyService.Append(new CleanupHistoryEntry(DateTimeOffset.Now, scope, cleanup.DeletedFiles, cleanup.ReclaimedBytes));
+            StatusText.Text = cleanup.DeletedFiles == 0 ? "Нечего удалить" : "Очистка завершена";
+            StatusDetails.Text = $"Удалено: {cleanup.DeletedFiles:N0}, пропущено: {cleanup.SkippedFiles:N0}";
             ActivityText.Text = "Очистка выполнена только что";
-            ActivityResultText.Text = $"Удалено файлов: {deleted:N0}";
-            ActivitySizeText.Text = "Повторите проверку, чтобы увидеть актуальный результат";
+            ActivityResultText.Text = $"Удалено файлов: {cleanup.DeletedFiles:N0}";
+            ActivitySizeText.Text = $"Освобождено {FormatBytes(cleanup.ReclaimedBytes)} · пропущено: {cleanup.SkippedFiles:N0}";
             _lastScan = null;
             DetailsButton.IsEnabled = false;
             UserTempValue.Text = "—";

@@ -3,6 +3,7 @@ using System.IO;
 namespace Cleaner;
 
 public sealed record ScanFile(string Path, long Bytes);
+public sealed record CleanupResult(int DeletedFiles, int SkippedFiles, long ReclaimedBytes);
 
 public sealed record ScanResult(IReadOnlyList<ScanFile> UserTempFiles, IReadOnlyList<ScanFile> WindowsTempFiles, RecycleBinInfo RecycleBin)
 {
@@ -25,28 +26,41 @@ public sealed class CleanerScanService
         }, cancellationToken);
     }
 
-    public Task<int> DeleteAsync(ScanResult result, IEnumerable<string> selectedDrives, bool deleteUserTemp, bool deleteWindowsTemp, bool deleteRecycleBin, CancellationToken cancellationToken = default)
+    public Task<CleanupResult> DeleteAsync(ScanResult result, IEnumerable<string> selectedDrives, bool deleteUserTemp, bool deleteWindowsTemp, bool deleteRecycleBin, CancellationToken cancellationToken = default)
     {
         return Task.Run(() =>
         {
             var drives = NormalizeDrives(selectedDrives);
             var deleted = 0;
+            var skipped = 0;
+            long reclaimed = 0;
             if (deleteUserTemp)
             {
-                deleted += DeleteFiles(result.UserTempFiles, BuildUserCleanupRoots(drives), cancellationToken);
+                var stats = DeleteFiles(result.UserTempFiles, BuildUserCleanupRoots(drives), cancellationToken);
+                deleted += stats.DeletedFiles;
+                skipped += stats.SkippedFiles;
+                reclaimed += stats.ReclaimedBytes;
             }
 
             if (deleteWindowsTemp)
             {
-                deleted += DeleteFiles(result.WindowsTempFiles, BuildWindowsTempRoots(drives), cancellationToken);
+                var stats = DeleteFiles(result.WindowsTempFiles, BuildWindowsTempRoots(drives), cancellationToken);
+                deleted += stats.DeletedFiles;
+                skipped += stats.SkippedFiles;
+                reclaimed += stats.ReclaimedBytes;
             }
 
             if (deleteRecycleBin && result.RecycleBin.Items > 0 && new RecycleBinService().Empty(drives))
             {
                 deleted += result.RecycleBin.Items;
+                reclaimed += result.RecycleBin.Bytes;
+            }
+            else if (deleteRecycleBin && result.RecycleBin.Items > 0)
+            {
+                skipped += result.RecycleBin.Items;
             }
 
-            return deleted;
+            return new CleanupResult(deleted, skipped, reclaimed);
         }, cancellationToken);
     }
 
@@ -205,12 +219,14 @@ public sealed class CleanerScanService
         return files;
     }
 
-    private static int DeleteFiles(IEnumerable<ScanFile> files, IEnumerable<string> roots, CancellationToken cancellationToken)
+    private static CleanupResult DeleteFiles(IEnumerable<ScanFile> files, IEnumerable<string> roots, CancellationToken cancellationToken)
     {
         var fullRoots = roots
             .Select(root => Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar)
             .ToArray();
         var deleted = 0;
+        var skipped = 0;
+        long reclaimed = 0;
         foreach (var file in files)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -219,16 +235,18 @@ public sealed class CleanerScanService
                 var fullPath = Path.GetFullPath(file.Path);
                 if (!fullRoots.Any(root => fullPath.StartsWith(root, StringComparison.OrdinalIgnoreCase)) || !File.Exists(fullPath))
                 {
+                    skipped++;
                     continue;
                 }
 
                 File.Delete(fullPath);
                 deleted++;
+                reclaimed += file.Bytes;
             }
-            catch (UnauthorizedAccessException) { }
-            catch (IOException) { }
+            catch (UnauthorizedAccessException) { skipped++; }
+            catch (IOException) { skipped++; }
         }
 
-        return deleted;
+        return new CleanupResult(deleted, skipped, reclaimed);
     }
 }
