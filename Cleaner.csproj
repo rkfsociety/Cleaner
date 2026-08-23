@@ -10,4 +10,8 @@
     <ApplicationIcon>assets\cleaner-icon.ico</ApplicationIcon>
   </PropertyGroup>
 
+  <ItemGroup>
+    <Resource Include="assets\cleaner-icon.ico" />
+  </ItemGroup>
+
 </Project>
