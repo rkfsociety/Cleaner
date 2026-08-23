@@ -4,14 +4,19 @@ using System.Windows.Controls;
 
 namespace Cleaner;
 
-public partial class DriveSelectionWindow : Window
+public partial class DriveSelectionView : UserControl
 {
     private readonly List<CheckBox> _driveChecks = [];
-    public IReadOnlyList<string> SelectedDrives { get; private set; } = [];
+    private readonly Action<IReadOnlyList<string>> _apply;
+    private readonly Action _back;
+    private readonly AppDialogHost _dialog;
 
-    public DriveSelectionWindow(IEnumerable<string> selectedDrives)
+    public DriveSelectionView(IEnumerable<string> selectedDrives, AppDialogHost dialog, Action<IReadOnlyList<string>> apply, Action back)
     {
         InitializeComponent();
+        _dialog = dialog;
+        _apply = apply;
+        _back = back;
 
         var systemRoot = WindowsDriveService.GetSystemDriveRoot();
         foreach (var drive in DriveInfo.GetDrives().Where(item => item.IsReady && item.DriveType == DriveType.Fixed))
@@ -19,7 +24,7 @@ public partial class DriveSelectionWindow : Window
             var isSystemDrive = string.Equals(drive.RootDirectory.FullName, systemRoot, StringComparison.OrdinalIgnoreCase);
             var check = new CheckBox
             {
-                Content = $"{drive.Name}  {drive.VolumeLabel}{(isSystemDrive ? "  · системный диск" : string.Empty)}  · свободно {FormatBytes(drive.AvailableFreeSpace)} из {FormatBytes(drive.TotalSize)}",
+                Content = $"{drive.Name}  {drive.VolumeLabel}{(isSystemDrive ? "  · системный диск" : string.Empty)}  · свободно {ByteSizeFormatter.Format(drive.AvailableFreeSpace)} из {ByteSizeFormatter.Format(drive.TotalSize)}",
                 Tag = drive.RootDirectory.FullName,
                 IsChecked = selectedDrives.Contains(drive.RootDirectory.FullName, StringComparer.OrdinalIgnoreCase),
                 FontSize = 14,
@@ -32,22 +37,19 @@ public partial class DriveSelectionWindow : Window
         }
     }
 
-    private void ApplyButton_Click(object sender, RoutedEventArgs e)
+    private async void ApplyButton_Click(object sender, RoutedEventArgs e)
     {
-        SelectedDrives = _driveChecks.Where(check => check.IsChecked == true).Select(check => (string)check.Tag).ToArray();
-        if (SelectedDrives.Count == 0)
+        var selected = _driveChecks.Where(check => check.IsChecked == true).Select(check => (string)check.Tag).ToArray();
+        if (selected.Length == 0)
         {
-            MessageBox.Show("Выберите хотя бы один диск.", "Cleaner", MessageBoxButton.OK, MessageBoxImage.Information);
+            await _dialog.ShowMessageAsync("Cleaner", "Выберите хотя бы один диск.");
             return;
         }
 
-        DialogResult = true;
+        _apply(selected);
     }
 
-    private void CancelButton_Click(object sender, RoutedEventArgs e)
-    {
-        DialogResult = false;
-    }
+    private void BackButton_Click(object sender, RoutedEventArgs e) => _back();
 
     private void SelectAllButton_Click(object sender, RoutedEventArgs e)
     {
@@ -64,6 +66,4 @@ public partial class DriveSelectionWindow : Window
             check.IsChecked = false;
         }
     }
-
-    private static string FormatBytes(long bytes) => ByteSizeFormatter.Format(bytes);
 }

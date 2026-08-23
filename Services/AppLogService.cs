@@ -8,7 +8,12 @@ internal static class AppLogService
     private static readonly object SyncRoot = new();
     private const long MaxLogBytes = 1_048_576;
 
-    public static void Write(string message, Exception exception)
+    public static void Write(string message, Exception exception) => Append($"{message}: {exception}");
+
+    /// <summary>Запись о действии пользователя без ошибки (например, о запуске деинсталлятора).</summary>
+    public static void Write(string message) => Append(message);
+
+    private static void Append(string text)
     {
         try
         {
@@ -17,7 +22,7 @@ internal static class AppLogService
                 "Cleaner");
             Directory.CreateDirectory(directory);
 
-            var line = $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {message}: {exception}\r\n";
+            var line = $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {text}\r\n";
             var path = Path.Combine(directory, "app.log");
             lock (SyncRoot)
             {

@@ -1,6 +1,9 @@
 using System.Diagnostics;
 using System.IO;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Input;
+using System.Windows.Media;
 
 namespace Cleaner;
 
@@ -15,6 +18,7 @@ public partial class MainWindow : Window
     private CancellationTokenSource? _scanCancellation;
     private CancellationTokenSource? _cleanupCancellation;
     private ScanResult? _lastScan;
+    private Button? _activeNavButton;
     private static readonly TimeSpan MaximumScanAge = TimeSpan.FromMinutes(5);
 
     public MainWindow()
@@ -31,9 +35,10 @@ public partial class MainWindow : Window
         UserInitialText.Text = userName[..1].ToUpperInvariant();
         _selectedDriveRoots = _settingsService.LoadSelectedDrives(GetDefaultDriveRoots(), WindowsDriveService.GetSystemDriveRoot());
         _minimumFileAgeHours = _policyService.LoadMinimumAgeHours();
-        DriveButton.Content = $"Диски: {_selectedDriveRoots.Count} · системный {WindowsDriveService.GetSystemDriveRoot().TrimEnd('\\')}";
+        UpdateDriveButtonCaption();
         UpdateFreeSpaceIndicator();
         RestoreLatestActivity();
+        ShowHome();
         if (App.IsSystemCleanupSession)
         {
             UserTempCheckBox.IsChecked = false;
@@ -43,6 +48,48 @@ public partial class MainWindow : Window
             StatusText.Text = "Системная очистка";
             StatusDetails.Text = "Открыта повышенная сессия только для системного Temp";
         }
+    }
+
+    /// <summary>Единственное окно приложения: все разделы и диалоги показываются внутри него.</summary>
+    public AppDialogHost DialogHost => Dialog;
+
+    private void ShowHome()
+    {
+        PageHost.Content = null;
+        PageHost.Visibility = Visibility.Collapsed;
+        HomeView.Visibility = Visibility.Visible;
+        HighlightNavigation(HomeNavButton);
+    }
+
+    private void ShowPage(UIElement page, Button? navButton)
+    {
+        PageHost.Content = page;
+        PageHost.Visibility = Visibility.Visible;
+        HomeView.Visibility = Visibility.Collapsed;
+        HighlightNavigation(navButton);
+    }
+
+    private void HighlightNavigation(Button? navButton)
+    {
+        if (_activeNavButton is not null)
+        {
+            _activeNavButton.ClearValue(BackgroundProperty);
+            _activeNavButton.ClearValue(ForegroundProperty);
+        }
+
+        _activeNavButton = navButton;
+        if (navButton is null)
+        {
+            return;
+        }
+
+        navButton.Background = (Brush)FindResource("PurpleLight");
+        navButton.Foreground = (Brush)FindResource("Purple");
+    }
+
+    private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        e.Handled = Dialog.HandleKey(e.Key);
     }
 
     private async void ScanButton_Click(object sender, RoutedEventArgs e)
@@ -120,7 +167,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        new ScanDetailsWindow(_lastScan) { Owner = this }.ShowDialog();
+        ShowPage(new ScanDetailsView(_lastScan, ShowHome), null);
     }
 
     private async void CleanButton_Click(object sender, RoutedEventArgs e)
@@ -141,7 +188,7 @@ public partial class MainWindow : Window
         if (!_lastScan.IsFresh(MaximumScanAge, DateTimeOffset.Now))
         {
             InvalidateScan("Результат устарел", "Для безопасной очистки запустите новую проверку.");
-            MessageBox.Show("Результат проверки старше пяти минут. Чтобы не удалить данные, появившиеся позже, выполните новую проверку.", "Нужна новая проверка", MessageBoxButton.OK, MessageBoxImage.Information);
+            await Dialog.ShowMessageAsync("Нужна новая проверка", "Результат проверки старше пяти минут. Чтобы не удалить данные, появившиеся позже, выполните новую проверку.");
             return;
         }
 
@@ -150,16 +197,19 @@ public partial class MainWindow : Window
         var deleteRecycleBin = RecycleBinCheckBox.IsChecked == true;
         if (!deleteUserTemp && !deleteWindowsTemp && !deleteRecycleBin)
         {
-            MessageBox.Show("Выберите хотя бы одну категорию для очистки.", "Cleaner", MessageBoxButton.OK, MessageBoxImage.Information);
+            await Dialog.ShowMessageAsync("Cleaner", "Выберите хотя бы одну категорию для очистки.");
             return;
         }
 
         if (deleteWindowsTemp && !App.IsAdministrator)
         {
-            var elevation = MessageBox.Show("Для системного Temp нужна отдельная повышенная сессия. Cleaner перезапустится в режиме только системной очистки; после запуска повторите проверку.", "Нужны права администратора", MessageBoxButton.YesNo, MessageBoxImage.Information);
-            if (elevation == MessageBoxResult.Yes && !App.RestartForSystemCleanup())
+            var elevation = await Dialog.ConfirmAsync(
+                "Нужны права администратора",
+                "Для системного Temp нужна отдельная повышенная сессия. Cleaner перезапустится в режиме только системной очистки; после запуска повторите проверку.",
+                "Перезапустить");
+            if (elevation && !App.RestartForSystemCleanup())
             {
-                MessageBox.Show("Не удалось получить права администратора. Системные файлы останутся без изменений.", "Cleaner", MessageBoxButton.OK, MessageBoxImage.Warning);
+                await Dialog.ShowMessageAsync("Cleaner", "Не удалось получить права администратора. Системные файлы останутся без изменений.");
             }
 
             return;
@@ -171,7 +221,7 @@ public partial class MainWindow : Window
             if (CleanerScanService.HasRecycleBinChanged(_lastScan.RecycleBin, currentRecycleBin))
             {
                 InvalidateScan("Корзина изменилась", "Для безопасной очистки запустите новую проверку.");
-                MessageBox.Show("Содержимое корзины изменилось после проверки. Чтобы не удалить новые данные без отдельного подтверждения, выполните новую проверку.", "Нужна новая проверка", MessageBoxButton.OK, MessageBoxImage.Information);
+                await Dialog.ShowMessageAsync("Нужна новая проверка", "Содержимое корзины изменилось после проверки. Чтобы не удалить новые данные без отдельного подтверждения, выполните новую проверку.");
                 return;
             }
         }
@@ -189,12 +239,11 @@ public partial class MainWindow : Window
             ? $"\nФайлы младше {_minimumFileAgeHours} часов будут пропущены."
             : string.Empty;
 
-        var confirmation = MessageBox.Show(
-            $"Удалить выбранные данные (до {FormatBytes(selectedBytes)})? Занятые и недоступные файлы будут пропущены.{ageWarning}{browserWarning}",
+        var confirmation = await Dialog.ConfirmAsync(
             "Подтверждение очистки",
-            MessageBoxButton.YesNo,
-            MessageBoxImage.Warning);
-        if (confirmation != MessageBoxResult.Yes)
+            $"Удалить выбранные данные (до {FormatBytes(selectedBytes)})? Занятые и недоступные файлы будут пропущены.{ageWarning}{browserWarning}",
+            "Очистить");
+        if (!confirmation)
         {
             return;
         }
@@ -273,61 +322,63 @@ public partial class MainWindow : Window
 
     private static string FormatBytes(long bytes) => ByteSizeFormatter.Format(bytes);
 
-    private void DriveButton_Click(object sender, RoutedEventArgs e)
+    private void DriveButton_Click(object sender, RoutedEventArgs e) => ShowDriveSelection();
+
+    private void ShowDriveSelection()
     {
-        var dialog = new DriveSelectionWindow(_selectedDriveRoots) { Owner = this };
-        if (dialog.ShowDialog() == true)
+        ShowPage(new DriveSelectionView(_selectedDriveRoots, Dialog, ApplySelectedDrives, ShowHome), null);
+    }
+
+    private async void ApplySelectedDrives(IReadOnlyList<string> drives)
+    {
+        _selectedDriveRoots = drives;
+        UpdateDriveButtonCaption();
+        _lastScan = null;
+        CleanButton.IsEnabled = false;
+        DetailsButton.IsEnabled = false;
+        StatusText.Text = "Диски выбраны";
+        StatusDetails.Text = "Запустите проверку заново";
+        ShowHome();
+        if (!_settingsService.SaveSelectedDrives(_selectedDriveRoots))
         {
-            _selectedDriveRoots = dialog.SelectedDrives;
-            if (!_settingsService.SaveSelectedDrives(_selectedDriveRoots))
-            {
-                MessageBox.Show("Выбор дисков применён для текущего запуска, но не сохранён. Проверьте доступ к папке данных Cleaner.", "Cleaner", MessageBoxButton.OK, MessageBoxImage.Warning);
-            }
-            DriveButton.Content = $"Диски: {_selectedDriveRoots.Count} · системный {WindowsDriveService.GetSystemDriveRoot().TrimEnd('\\')}";
-            _lastScan = null;
-            CleanButton.IsEnabled = false;
-            DetailsButton.IsEnabled = false;
-            StatusText.Text = "Диски выбраны";
-            StatusDetails.Text = "Запустите проверку заново";
+            await Dialog.ShowMessageAsync("Cleaner", "Выбор дисков применён для текущего запуска, но не сохранён. Проверьте доступ к папке данных Cleaner.");
         }
     }
 
-    private void ProgramsButton_Click(object sender, RoutedEventArgs e)
+    private void UpdateDriveButtonCaption()
     {
-        new ProgramsWindow { Owner = this }.ShowDialog();
+        DriveButton.Content = $"Диски: {_selectedDriveRoots.Count} · системный {WindowsDriveService.GetSystemDriveRoot().TrimEnd('\\')}";
     }
 
-    private void HistoryButton_Click(object sender, RoutedEventArgs e)
+    private void HomeNavigation_Click(object sender, RoutedEventArgs e) => ShowHome();
+
+    private void ProgramsNavigation_Click(object sender, RoutedEventArgs e)
     {
-        var dialog = new HistoryWindow(_historyService) { Owner = this };
-        dialog.ShowDialog();
+        ShowPage(new ProgramsView(Dialog), ProgramsNavButton);
     }
 
-    private void CleanupNavigation_Click(object sender, RoutedEventArgs e)
+    private void HistoryNavigation_Click(object sender, RoutedEventArgs e)
     {
-        ScanButton_Click(sender, e);
+        ShowPage(new HistoryView(_historyService, Dialog), HistoryNavButton);
     }
 
     private void SettingsNavigation_Click(object sender, RoutedEventArgs e)
     {
-        var dialog = new SettingsWindow(_minimumFileAgeHours, _selectedDriveRoots.Count) { Owner = this };
-        if (dialog.ShowDialog() == true)
+        ShowPage(new SettingsView(_minimumFileAgeHours, _selectedDriveRoots.Count, ApplyMinimumAge, ShowDriveSelection), SettingsNavButton);
+    }
+
+    private async void ApplyMinimumAge(int minimumFileAgeHours)
+    {
+        _minimumFileAgeHours = minimumFileAgeHours;
+        if (!_policyService.SaveMinimumAgeHours(_minimumFileAgeHours))
         {
-            _minimumFileAgeHours = dialog.MinimumFileAgeHours;
-            if (!_policyService.SaveMinimumAgeHours(_minimumFileAgeHours))
-            {
-                MessageBox.Show("Режим применён для текущего запуска, но не сохранён. Проверьте доступ к папке данных Cleaner.", "Cleaner", MessageBoxButton.OK, MessageBoxImage.Warning);
-            }
+            await Dialog.ShowMessageAsync("Cleaner", "Режим применён для текущего запуска, но не сохранён. Проверьте доступ к папке данных Cleaner.");
         }
     }
 
     private void HelpNavigation_Click(object sender, RoutedEventArgs e)
     {
-        MessageBox.Show(
-            "1. Нажмите «Начать проверку».\n2. При необходимости выберите диски.\n3. Отметьте категории очистки.\n4. Откройте детали и нажмите «Очистить выбранное».\n5. Подтвердите удаление.\n\nРезультат действует пять минут. Занятые, недоступные и связанные с другими местами файлы пропускаются. Для системных файлов Windows может потребоваться запуск от имени администратора.",
-            "Как пользоваться Cleaner",
-            MessageBoxButton.OK,
-            MessageBoxImage.Information);
+        ShowPage(new HelpView(), HelpNavButton);
     }
 
     private static IReadOnlyList<string> GetDefaultDriveRoots()

@@ -23,13 +23,17 @@ public partial class App : Application
     private static void OnDispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
     {
         AppLogService.Write("Необработанная ошибка интерфейса", e.Exception);
-        MessageBox.Show(
-            "Произошла ошибка приложения. Подробности сохранены в журнале Cleaner.",
-            "Cleaner",
-            MessageBoxButton.OK,
-            MessageBoxImage.Error);
-
+        ShowError("Произошла ошибка приложения. Подробности сохранены в журнале Cleaner.");
         e.Handled = true;
+    }
+
+    /// <summary>Сообщение показывается внутри главного окна: отдельных окон приложение не открывает.</summary>
+    private static void ShowError(string message)
+    {
+        if (Current?.MainWindow is MainWindow main)
+        {
+            _ = main.DialogHost.ShowMessageAsync("Cleaner", message);
+        }
     }
 
     private static void OnUnhandledException(object? sender, UnhandledExceptionEventArgs e)

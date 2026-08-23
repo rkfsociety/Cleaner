@@ -4,5 +4,36 @@
              xmlns:local="clr-namespace:Cleaner"
              StartupUri="Views/MainWindow.xaml">
     <Application.Resources>
+        <SolidColorBrush x:Key="Ink" Color="#192033" />
+        <SolidColorBrush x:Key="Muted" Color="#7D8497" />
+        <SolidColorBrush x:Key="Purple" Color="#6756D8" />
+        <SolidColorBrush x:Key="PurpleLight" Color="#EEEAFE" />
+        <SolidColorBrush x:Key="Line" Color="#E8EAF1" />
+        <Style x:Key="NavButton" TargetType="Button">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Foreground" Value="#8D94A8" />
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="HorizontalContentAlignment" Value="Left" />
+            <Setter Property="Padding" Value="18,12" />
+            <Setter Property="Margin" Value="0,2" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border Background="{TemplateBinding Background}" CornerRadius="10"><ContentPresenter VerticalAlignment="Center" /></Border></ControlTemplate></Setter.Value></Setter>
+            <Style.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="#F0EEFC" /><Setter Property="Foreground" Value="{StaticResource Purple}" /></Trigger></Style.Triggers>
+        </Style>
+        <Style x:Key="Card" TargetType="Border"><Setter Property="Background" Value="White" /><Setter Property="CornerRadius" Value="16" /><Setter Property="Padding" Value="14" /></Style>
+        <Style x:Key="PrimaryButton" TargetType="Button">
+            <Setter Property="Background" Value="{StaticResource Purple}" /><Setter Property="Foreground" Value="White" /><Setter Property="FontSize" Value="15" /><Setter Property="FontWeight" Value="SemiBold" /><Setter Property="Padding" Value="24,14" /><Setter Property="BorderThickness" Value="0" /><Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border Background="{TemplateBinding Background}" CornerRadius="10" Padding="{TemplateBinding Padding}"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" /></Border></ControlTemplate></Setter.Value></Setter>
+            <Style.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="#5747C7" /></Trigger><Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.6" /></Trigger></Style.Triggers>
+        </Style>
+        <Style x:Key="SecondaryButton" TargetType="Button">
+            <Setter Property="Background" Value="#F2F3F8" /><Setter Property="Foreground" Value="{StaticResource Ink}" /><Setter Property="FontSize" Value="13" /><Setter Property="Padding" Value="16,9" /><Setter Property="BorderThickness" Value="0" /><Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border Background="{TemplateBinding Background}" CornerRadius="9" Padding="{TemplateBinding Padding}"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" /></Border></ControlTemplate></Setter.Value></Setter>
+            <Style.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="#E7E9F2" /></Trigger><Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.5" /></Trigger></Style.Triggers>
+        </Style>
+        <Style x:Key="PageTitle" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource Ink}" /><Setter Property="FontSize" Value="22" /><Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
     </Application.Resources>
 </Application>

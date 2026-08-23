@@ -15,7 +15,9 @@ public sealed record InstalledProgram(
     DateTimeOffset? LastUsedAt,
     string LastUsedSource,
     string InstallLocation,
-    string RegistryScope);
+    string RegistryScope,
+    string UninstallString,
+    string RegistryKeyPath);
 
 public enum ProgramSortMode
 {
@@ -149,7 +151,9 @@ public sealed class InstalledProgramsService
             lastUsed,
             source,
             entry.InstallLocation,
-            entry.Scope);
+            entry.Scope,
+            entry.UninstallString,
+            entry.KeyPath);
     }
 
     private static IReadOnlyList<string> CollectExecutableNames(UninstallEntry entry)
@@ -315,7 +319,69 @@ public sealed class InstalledProgramsService
             ParseInstallDate(key.GetValue("InstallDate") as string),
             (key.GetValue("InstallLocation") as string)?.Trim().Trim('"') ?? string.Empty,
             (key.GetValue("DisplayIcon") as string)?.Trim() ?? string.Empty,
-            scope);
+            scope,
+            ChooseUninstallString(key),
+            key.Name);
+    }
+
+    /// <summary>
+    /// Команда удаления берётся из реестра как есть. Тихий вариант не используется:
+    /// пользователь должен видеть окно деинсталлятора и подтверждать удаление сам.
+    /// </summary>
+    private static string ChooseUninstallString(RegistryKey key)
+    {
+        var uninstall = (key.GetValue("UninstallString") as string)?.Trim();
+        if (!string.IsNullOrWhiteSpace(uninstall))
+        {
+            return uninstall;
+        }
+
+        return (key.GetValue("QuietUninstallString") as string)?.Trim() ?? string.Empty;
+    }
+
+    /// <summary>Проверяет, осталась ли запись программы в реестре (после работы деинсталлятора).</summary>
+    public bool IsStillInstalled(InstalledProgram program)
+    {
+        if (string.IsNullOrWhiteSpace(program.RegistryKeyPath))
+        {
+            return false;
+        }
+
+        foreach (var (hive, view, _) in EnumerateUninstallScopes())
+        {
+            try
+            {
+                using var root = RegistryKey.OpenBaseKey(hive, view);
+                using var uninstall = root.OpenSubKey(UninstallKey);
+                if (uninstall is null)
+                {
+                    continue;
+                }
+
+                foreach (var subKeyName in uninstall.GetSubKeyNames())
+                {
+                    using var key = uninstall.OpenSubKey(subKeyName);
+                    if (key is not null &&
+                        string.Equals(key.Name, program.RegistryKeyPath, StringComparison.OrdinalIgnoreCase) &&
+                        key.GetValue("DisplayName") is string displayName &&
+                        string.Equals(displayName.Trim(), program.Name, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return true;
+                    }
+                }
+            }
+            catch (SecurityException)
+            {
+            }
+            catch (UnauthorizedAccessException)
+            {
+            }
+            catch (IOException)
+            {
+            }
+        }
+
+        return false;
     }
 
     /// <summary>Дата установки хранится строкой вида <c>20240115</c>.</summary>
@@ -590,7 +656,9 @@ public sealed class InstalledProgramsService
         DateTimeOffset? InstalledAt,
         string InstallLocation,
         string DisplayIcon,
-        string Scope);
+        string Scope,
+        string UninstallString,
+        string KeyPath);
 
     private sealed class UsageIndex(Dictionary<string, DateTimeOffset> byPath, Dictionary<string, DateTimeOffset> byExecutable)
     {

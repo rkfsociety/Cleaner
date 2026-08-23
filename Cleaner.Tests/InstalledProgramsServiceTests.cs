@@ -7,7 +7,18 @@ public class InstalledProgramsServiceTests
 {
     private static InstalledProgram Program(string name, DateTimeOffset? lastUsed, long bytes = 0, DateTimeOffset? installed = null, string publisher = "")
     {
-        return new InstalledProgram(name, publisher, "1.0", bytes, installed, lastUsed, lastUsed is null ? "нет данных" : "журнал запусков", string.Empty, "Все пользователи");
+        return new InstalledProgram(
+            name,
+            publisher,
+            "1.0",
+            bytes,
+            installed,
+            lastUsed,
+            lastUsed is null ? "нет данных" : "журнал запусков",
+            string.Empty,
+            "Все пользователи",
+            @"C:\Program Files\App\unins000.exe",
+            @"HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\App");
     }
 
     [Fact]
