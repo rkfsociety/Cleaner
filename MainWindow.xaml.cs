@@ -42,9 +42,9 @@ public partial class MainWindow : Window
             StatusText.Text = result.TotalBytes == 0 ? "Всё чисто" : $"Найдено {FormatBytes(result.TotalBytes)}";
             StatusDetails.Text = $"Проверено файлов: {result.TotalFiles:N0}";
             UserTempValue.Text = FormatBytes(result.UserTempBytes);
-            UserTempSubtitle.Text = $"{result.UserTempFiles:N0} файлов";
+            UserTempSubtitle.Text = $"{result.UserTempFiles.Count:N0} файлов";
             WindowsTempValue.Text = FormatBytes(result.WindowsTempBytes);
-            WindowsTempSubtitle.Text = $"{result.WindowsTempFiles:N0} файлов";
+            WindowsTempSubtitle.Text = $"{result.WindowsTempFiles.Count:N0} файлов";
             RecycleBinValue.Text = FormatBytes(result.RecycleBin.Bytes);
             RecycleBinSubtitle.Text = $"{result.RecycleBin.Items:N0} объектов";
             ActivityText.Text = "Проверка завершена только что";
