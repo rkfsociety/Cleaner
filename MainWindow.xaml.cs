@@ -162,12 +162,13 @@ public partial class MainWindow : Window
             ActivitySizeText.Text = "Повторите проверку, чтобы увидеть актуальный результат";
             _lastScan = null;
             DetailsButton.IsEnabled = false;
-            UserTempValue.Text = "0 Б";
-            WindowsTempValue.Text = "0 Б";
-            RecycleBinValue.Text = "0 Б";
+            UserTempValue.Text = "—";
+            WindowsTempValue.Text = "—";
+            RecycleBinValue.Text = "—";
             UserTempSubtitle.Text = "Требуется повторная проверка";
             WindowsTempSubtitle.Text = "Требуется повторная проверка";
             RecycleBinSubtitle.Text = "Требуется повторная проверка";
+            UpdateFreeSpaceIndicator();
         }
         finally
         {
