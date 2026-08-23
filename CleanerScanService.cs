@@ -2,10 +2,14 @@ using System.IO;
 
 namespace Cleaner;
 
-public sealed record ScanResult(long UserTempBytes, int UserTempFiles, long WindowsTempBytes, int WindowsTempFiles)
+public sealed record ScanFile(string Path, long Bytes);
+
+public sealed record ScanResult(IReadOnlyList<ScanFile> UserTempFiles, IReadOnlyList<ScanFile> WindowsTempFiles)
 {
+    public long UserTempBytes => UserTempFiles.Sum(file => file.Bytes);
+    public long WindowsTempBytes => WindowsTempFiles.Sum(file => file.Bytes);
     public long TotalBytes => UserTempBytes + WindowsTempBytes;
-    public int TotalFiles => UserTempFiles + WindowsTempFiles;
+    public int TotalFiles => UserTempFiles.Count + WindowsTempFiles.Count;
 }
 
 public sealed class CleanerScanService
@@ -13,29 +17,43 @@ public sealed class CleanerScanService
     public Task<ScanResult> ScanAsync(CancellationToken cancellationToken = default)
     {
         return Task.Run(() => new ScanResult(
-            ScanDirectory(Path.GetTempPath(), cancellationToken, out var userFiles),
-            userFiles,
-            ScanDirectory(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "Temp"), cancellationToken, out var windowsFiles),
-            windowsFiles), cancellationToken);
+            ScanDirectory(Path.GetTempPath(), cancellationToken),
+            ScanDirectory(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "Temp"), cancellationToken)), cancellationToken);
     }
 
-    private static long ScanDirectory(string path, CancellationToken cancellationToken, out int fileCount)
+    public Task<int> DeleteAsync(ScanResult result, bool deleteUserTemp, bool deleteWindowsTemp, CancellationToken cancellationToken = default)
     {
-        fileCount = 0;
+        return Task.Run(() =>
+        {
+            var deleted = 0;
+            if (deleteUserTemp)
+            {
+                deleted += DeleteFiles(result.UserTempFiles, Path.GetTempPath(), cancellationToken);
+            }
+
+            if (deleteWindowsTemp)
+            {
+                deleted += DeleteFiles(result.WindowsTempFiles, Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "Temp"), cancellationToken);
+            }
+
+            return deleted;
+        }, cancellationToken);
+    }
+
+    private static List<ScanFile> ScanDirectory(string path, CancellationToken cancellationToken)
+    {
+        var files = new List<ScanFile>();
         if (!Directory.Exists(path))
         {
-            return 0;
+            return files;
         }
 
-        long totalBytes = 0;
         var pending = new Stack<string>();
         pending.Push(path);
-
         while (pending.Count > 0)
         {
             cancellationToken.ThrowIfCancellationRequested();
             var current = pending.Pop();
-
             try
             {
                 foreach (var file in Directory.EnumerateFiles(current))
@@ -43,15 +61,10 @@ public sealed class CleanerScanService
                     cancellationToken.ThrowIfCancellationRequested();
                     try
                     {
-                        totalBytes += new FileInfo(file).Length;
-                        fileCount++;
+                        files.Add(new ScanFile(file, new FileInfo(file).Length));
                     }
-                    catch (UnauthorizedAccessException)
-                    {
-                    }
-                    catch (IOException)
-                    {
-                    }
+                    catch (UnauthorizedAccessException) { }
+                    catch (IOException) { }
                 }
 
                 foreach (var directory in Directory.EnumerateDirectories(current))
@@ -63,22 +76,39 @@ public sealed class CleanerScanService
                             pending.Push(directory);
                         }
                     }
-                    catch (UnauthorizedAccessException)
-                    {
-                    }
-                    catch (IOException)
-                    {
-                    }
+                    catch (UnauthorizedAccessException) { }
+                    catch (IOException) { }
                 }
             }
-            catch (UnauthorizedAccessException)
-            {
-            }
-            catch (IOException)
-            {
-            }
+            catch (UnauthorizedAccessException) { }
+            catch (IOException) { }
         }
 
-        return totalBytes;
+        return files;
+    }
+
+    private static int DeleteFiles(IEnumerable<ScanFile> files, string root, CancellationToken cancellationToken)
+    {
+        var deleted = 0;
+        var fullRoot = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        foreach (var file in files)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                var fullPath = Path.GetFullPath(file.Path);
+                if (!fullPath.StartsWith(fullRoot, StringComparison.OrdinalIgnoreCase) || !File.Exists(fullPath))
+                {
+                    continue;
+                }
+
+                File.Delete(fullPath);
+                deleted++;
+            }
+            catch (UnauthorizedAccessException) { }
+            catch (IOException) { }
+        }
+
+        return deleted;
     }
 }
