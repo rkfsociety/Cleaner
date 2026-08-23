@@ -11,6 +11,7 @@ public partial class ProgramsView : UserControl
 {
     private readonly InstalledProgramsService _programsService = new();
     private readonly ProgramUninstallService _uninstallService;
+    private readonly ResidualCleanupService _residuals = new();
     private readonly AppDialogHost _dialog;
     private IReadOnlyList<InstalledProgram> _programs = [];
     private CancellationTokenSource? _loadCancellation;
@@ -178,8 +179,43 @@ public partial class ProgramsView : UserControl
         }
 
         AppLogService.Write($"Удаление «{program.Name}»: запущено={outcome.Started}, код={outcome.ExitCode?.ToString() ?? "нет"}, осталась={outcome.StillInstalled}");
+        await OfferResidualCleanupAsync(program, outcome);
         await _dialog.ShowMessageAsync("Удаление программы", outcome.Message);
         await ReloadAsync();
+    }
+
+    private async Task OfferResidualCleanupAsync(InstalledProgram program, UninstallOutcome outcome)
+    {
+        if (outcome.ResidualFiles.Count == 0 && outcome.ResidualRegistryEntries.Count == 0)
+        {
+            return;
+        }
+
+        var bytes = outcome.ResidualFiles.Sum(file => file.Size);
+        var paths = outcome.ResidualFiles
+            .Select(file => file.Root)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(4)
+            .ToArray();
+        var preview = paths.Length == 0 ? string.Empty : $"\n\nПапки: {string.Join("; ", paths)}";
+        var registryWarning = outcome.ResidualRegistryEntries.Count == 0
+            ? string.Empty
+            : "\n\nТакже будут удалены точные оставшиеся записи этой программы из раздела деинсталляции Windows. Это уберёт её из списка установленных.";
+        var confirmed = await _dialog.ConfirmAsync(
+            "Найдены остатки программы",
+            $"После удаления «{program.Name}» найдены файлы: {outcome.ResidualFiles.Count:N0} ({ByteSizeFormatter.Format(bytes)}) и записи реестра: {outcome.ResidualRegistryEntries.Count:N0}.{preview}{registryWarning}\n\nУдалить найденные остатки? Занятые или защищённые объекты будут пропущены.",
+            "Удалить остатки");
+        if (!confirmed)
+        {
+            return;
+        }
+
+        var files = _residuals.Delete(outcome.ResidualFiles);
+        var registry = _residuals.DeleteRegistryEntries(outcome.ResidualRegistryEntries);
+        AppLogService.Write($"Остатки «{program.Name}»: файлов удалено={files.DeletedFiles}, пропущено={files.SkippedFiles}, байт={files.DeletedBytes}, записей реестра удалено={registry.DeletedEntries}, пропущено={registry.SkippedEntries}");
+        await _dialog.ShowMessageAsync(
+            "Очистка остатков",
+            $"Удалено файлов: {files.DeletedFiles:N0} ({ByteSizeFormatter.Format(files.DeletedBytes)}), пропущено: {files.SkippedFiles:N0}. Записей реестра удалено: {registry.DeletedEntries:N0}, пропущено: {registry.SkippedEntries:N0}.");
     }
 
     private async void RefreshButton_Click(object sender, RoutedEventArgs e) => await ReloadAsync();

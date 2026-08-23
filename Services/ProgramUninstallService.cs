@@ -11,7 +11,13 @@ public sealed record UninstallCommand(string FileName, string Arguments)
 }
 
 /// <summary>Итог запуска деинсталлятора.</summary>
-public sealed record UninstallOutcome(bool Started, int? ExitCode, bool StillInstalled, string Message);
+public sealed record UninstallOutcome(
+    bool Started,
+    int? ExitCode,
+    bool StillInstalled,
+    string Message,
+    IReadOnlyList<ResidualFile> ResidualFiles,
+    IReadOnlyList<ResidualRegistryEntry> ResidualRegistryEntries);
 
 /// <summary>
 /// Запускает штатный деинсталлятор программы. Cleaner сам ничего не удаляет:
@@ -21,14 +27,16 @@ public sealed record UninstallOutcome(bool Started, int? ExitCode, bool StillIns
 public sealed class ProgramUninstallService
 {
     private readonly InstalledProgramsService _programsService;
+    private readonly ResidualCleanupService _residuals;
 
-    public ProgramUninstallService() : this(new InstalledProgramsService())
+    public ProgramUninstallService() : this(new InstalledProgramsService(), new ResidualCleanupService())
     {
     }
 
-    public ProgramUninstallService(InstalledProgramsService programsService)
+    public ProgramUninstallService(InstalledProgramsService programsService, ResidualCleanupService? residuals = null)
     {
         _programsService = programsService;
+        _residuals = residuals ?? new ResidualCleanupService();
     }
 
     /// <summary>
@@ -124,7 +132,7 @@ public sealed class ProgramUninstallService
         var command = Parse(program.UninstallString);
         if (command is null)
         {
-            return new UninstallOutcome(false, null, true, "В реестре нет команды удаления для этой программы.");
+            return new UninstallOutcome(false, null, true, "В реестре нет команды удаления для этой программы.", _residuals.Find(program), _residuals.FindRegistryEntries(program));
         }
 
         try
@@ -142,29 +150,35 @@ public sealed class ProgramUninstallService
             using var process = Process.Start(startInfo);
             if (process is null)
             {
-                return new UninstallOutcome(false, null, true, "Не удалось запустить деинсталлятор.");
+                return BuildOutcome(program, false, null, "Не удалось запустить деинсталлятор.");
             }
 
             await process.WaitForExitAsync(cancellationToken);
             var exitCode = process.ExitCode;
             var stillInstalled = _programsService.IsStillInstalled(program);
-            return new UninstallOutcome(true, exitCode, stillInstalled, DescribeOutcome(exitCode, stillInstalled));
+            return BuildOutcome(program, true, exitCode, DescribeOutcome(exitCode, stillInstalled));
         }
         catch (Win32Exception exception)
         {
             AppLogService.Write($"Не удалось запустить деинсталлятор: {command.Display}", exception);
-            return new UninstallOutcome(false, null, true, "Windows не разрешила запуск деинсталлятора или он не найден.");
+            return BuildOutcome(program, false, null, "Windows не разрешила запуск деинсталлятора или он не найден.");
         }
         catch (FileNotFoundException exception)
         {
             AppLogService.Write($"Деинсталлятор не найден: {command.Display}", exception);
-            return new UninstallOutcome(false, null, true, "Файл деинсталлятора не найден. Возможно, программа уже удалена частично.");
+            return BuildOutcome(program, false, null, "Файл деинсталлятора не найден. Возможно, программа уже удалена частично.");
         }
         catch (InvalidOperationException exception)
         {
             AppLogService.Write($"Ошибка запуска деинсталлятора: {command.Display}", exception);
-            return new UninstallOutcome(false, null, true, "Не удалось запустить деинсталлятор.");
+            return BuildOutcome(program, false, null, "Не удалось запустить деинсталлятор.");
         }
+    }
+
+    private UninstallOutcome BuildOutcome(InstalledProgram program, bool started, int? exitCode, string message)
+    {
+        return new UninstallOutcome(started, exitCode, _programsService.IsStillInstalled(program), message,
+            _residuals.Find(program), _residuals.FindRegistryEntries(program));
     }
 
     /// <summary>Понятное сообщение по коду возврата деинсталлятора и состоянию реестра.</summary>

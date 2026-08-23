@@ -4,34 +4,46 @@
              xmlns:local="clr-namespace:Cleaner"
              StartupUri="Views/MainWindow.xaml">
     <Application.Resources>
-        <SolidColorBrush x:Key="Ink" Color="#192033" />
-        <SolidColorBrush x:Key="Muted" Color="#7D8497" />
-        <SolidColorBrush x:Key="Purple" Color="#6756D8" />
-        <SolidColorBrush x:Key="PurpleLight" Color="#EEEAFE" />
-        <SolidColorBrush x:Key="Line" Color="#E8EAF1" />
+        <SolidColorBrush x:Key="WindowBackground" Color="#0F121A" />
+        <SolidColorBrush x:Key="PanelBackground" Color="#151A25" />
+        <SolidColorBrush x:Key="CardBackground" Color="#1B2230" />
+        <SolidColorBrush x:Key="InputBackground" Color="#202838" />
+        <SolidColorBrush x:Key="Ink" Color="#F2F4F8" />
+        <SolidColorBrush x:Key="Muted" Color="#9AA5B8" />
+        <SolidColorBrush x:Key="Purple" Color="#8B7CFF" />
+        <SolidColorBrush x:Key="PurpleLight" Color="#2A2747" />
+        <SolidColorBrush x:Key="Line" Color="#30394A" />
         <Style x:Key="NavButton" TargetType="Button">
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="Foreground" Value="#8D94A8" />
+            <Setter Property="Foreground" Value="#A5AEC0" />
             <Setter Property="FontSize" Value="14" />
             <Setter Property="HorizontalContentAlignment" Value="Left" />
             <Setter Property="Padding" Value="18,12" />
             <Setter Property="Margin" Value="0,2" />
             <Setter Property="Cursor" Value="Hand" />
             <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border Background="{TemplateBinding Background}" CornerRadius="10"><ContentPresenter VerticalAlignment="Center" /></Border></ControlTemplate></Setter.Value></Setter>
-            <Style.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="#F0EEFC" /><Setter Property="Foreground" Value="{StaticResource Purple}" /></Trigger></Style.Triggers>
+            <Style.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="#252B3D" /><Setter Property="Foreground" Value="{StaticResource Purple}" /></Trigger></Style.Triggers>
         </Style>
-        <Style x:Key="Card" TargetType="Border"><Setter Property="Background" Value="White" /><Setter Property="CornerRadius" Value="16" /><Setter Property="Padding" Value="14" /></Style>
+        <Style x:Key="Card" TargetType="Border"><Setter Property="Background" Value="{StaticResource CardBackground}" /><Setter Property="CornerRadius" Value="16" /><Setter Property="Padding" Value="14" /></Style>
         <Style x:Key="PrimaryButton" TargetType="Button">
-            <Setter Property="Background" Value="{StaticResource Purple}" /><Setter Property="Foreground" Value="White" /><Setter Property="FontSize" Value="15" /><Setter Property="FontWeight" Value="SemiBold" /><Setter Property="Padding" Value="24,14" /><Setter Property="BorderThickness" Value="0" /><Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Background" Value="{StaticResource Purple}" /><Setter Property="Foreground" Value="#FFFFFF" /><Setter Property="FontSize" Value="15" /><Setter Property="FontWeight" Value="SemiBold" /><Setter Property="Padding" Value="24,14" /><Setter Property="BorderThickness" Value="0" /><Setter Property="Cursor" Value="Hand" />
             <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border Background="{TemplateBinding Background}" CornerRadius="10" Padding="{TemplateBinding Padding}"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" /></Border></ControlTemplate></Setter.Value></Setter>
-            <Style.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="#5747C7" /></Trigger><Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.6" /></Trigger></Style.Triggers>
+            <Style.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="#7568F0" /></Trigger><Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.6" /></Trigger></Style.Triggers>
         </Style>
         <Style x:Key="SecondaryButton" TargetType="Button">
-            <Setter Property="Background" Value="#F2F3F8" /><Setter Property="Foreground" Value="{StaticResource Ink}" /><Setter Property="FontSize" Value="13" /><Setter Property="Padding" Value="16,9" /><Setter Property="BorderThickness" Value="0" /><Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Background" Value="#252D3C" /><Setter Property="Foreground" Value="{StaticResource Ink}" /><Setter Property="FontSize" Value="13" /><Setter Property="Padding" Value="16,9" /><Setter Property="BorderThickness" Value="0" /><Setter Property="Cursor" Value="Hand" />
             <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border Background="{TemplateBinding Background}" CornerRadius="9" Padding="{TemplateBinding Padding}"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" /></Border></ControlTemplate></Setter.Value></Setter>
-            <Style.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="#E7E9F2" /></Trigger><Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.5" /></Trigger></Style.Triggers>
+            <Style.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="#343D50" /></Trigger><Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.5" /></Trigger></Style.Triggers>
         </Style>
+        <Style TargetType="TextBox"><Setter Property="Background" Value="{StaticResource InputBackground}" /><Setter Property="Foreground" Value="{StaticResource Ink}" /><Setter Property="BorderBrush" Value="{StaticResource Line}" /><Setter Property="CaretBrush" Value="{StaticResource Ink}" /></Style>
+        <Style TargetType="ComboBox"><Setter Property="Background" Value="{StaticResource InputBackground}" /><Setter Property="Foreground" Value="{StaticResource Ink}" /><Setter Property="BorderBrush" Value="{StaticResource Line}" /></Style>
+        <Style TargetType="ComboBoxItem"><Setter Property="Background" Value="{StaticResource InputBackground}" /><Setter Property="Foreground" Value="{StaticResource Ink}" /><Style.Triggers><Trigger Property="IsHighlighted" Value="True"><Setter Property="Background" Value="{StaticResource PurpleLight}" /></Trigger></Style.Triggers></Style>
+        <Style TargetType="ListView"><Setter Property="Foreground" Value="{StaticResource Ink}" /></Style>
+        <Style TargetType="ListViewItem"><Setter Property="Foreground" Value="{StaticResource Ink}" /><Setter Property="Background" Value="Transparent" /><Setter Property="Padding" Value="6,4" /><Style.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="#252D3C" /></Trigger><Trigger Property="IsSelected" Value="True"><Setter Property="Background" Value="{StaticResource PurpleLight}" /></Trigger></Style.Triggers></Style>
+        <Style TargetType="GridViewColumnHeader"><Setter Property="Background" Value="{StaticResource InputBackground}" /><Setter Property="Foreground" Value="{StaticResource Muted}" /><Setter Property="BorderBrush" Value="{StaticResource Line}" /><Setter Property="Padding" Value="8,6" /></Style>
+        <Style TargetType="CheckBox"><Setter Property="Foreground" Value="{StaticResource Ink}" /></Style>
+        <Style TargetType="ProgressBar"><Setter Property="Foreground" Value="{StaticResource Purple}" /><Setter Property="Background" Value="{StaticResource Line}" /></Style>
         <Style x:Key="PageTitle" TargetType="TextBlock">
             <Setter Property="Foreground" Value="{StaticResource Ink}" /><Setter Property="FontSize" Value="22" /><Setter Property="FontWeight" Value="SemiBold" />
         </Style>

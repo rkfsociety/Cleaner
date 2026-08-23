@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 
 namespace Cleaner;
 
@@ -13,10 +14,13 @@ public partial class MainWindow : Window
     private readonly CleanupHistoryService _historyService = new();
     private readonly CleanerSettingsService _settingsService = new();
     private readonly CleanupPolicyService _policyService = new();
+    private readonly DiskUsageService _diskUsageService = new();
     private IReadOnlyList<string> _selectedDriveRoots;
     private int _minimumFileAgeHours;
     private CancellationTokenSource? _scanCancellation;
     private CancellationTokenSource? _cleanupCancellation;
+    private CancellationTokenSource? _diskUsageCancellation;
+    private System.Windows.Shapes.Path? _diskUsageLoadingPath;
     private ScanResult? _lastScan;
     private Button? _activeNavButton;
     private static readonly TimeSpan MaximumScanAge = TimeSpan.FromMinutes(5);
@@ -24,6 +28,11 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        if (DiskLegendPanel.Parent is Grid legendGrid && legendGrid.Parent is Grid cardGrid && cardGrid.ColumnDefinitions.Count > 1)
+        {
+            cardGrid.ColumnDefinitions[1].Width = new GridLength(390);
+            DiskLegendPanel.Width = 215;
+        }
 
         var userName = Environment.UserName.Trim();
         if (string.IsNullOrEmpty(userName))
@@ -37,6 +46,8 @@ public partial class MainWindow : Window
         _minimumFileAgeHours = _policyService.LoadMinimumAgeHours();
         UpdateDriveButtonCaption();
         UpdateFreeSpaceIndicator();
+        Loaded += async (_, _) => await UpdateDiskUsageAsync();
+        Unloaded += (_, _) => _diskUsageCancellation?.Cancel();
         RestoreLatestActivity();
         ShowHome();
         if (App.IsSystemCleanupSession)
@@ -339,6 +350,7 @@ public partial class MainWindow : Window
         StatusText.Text = "Диски выбраны";
         StatusDetails.Text = "Запустите проверку заново";
         ShowHome();
+        await UpdateDiskUsageAsync();
         if (!_settingsService.SaveSelectedDrives(_selectedDriveRoots))
         {
             await Dialog.ShowMessageAsync("Cleaner", "Выбор дисков применён для текущего запуска, но не сохранён. Проверьте доступ к папке данных Cleaner.");
@@ -390,21 +402,25 @@ public partial class MainWindow : Window
     {
         try
         {
-            var systemRoot = Path.GetPathRoot(Environment.SystemDirectory);
-            if (string.IsNullOrWhiteSpace(systemRoot))
+            var drives = _selectedDriveRoots
+                .Select(root => new DriveInfo(root))
+                .Where(drive => drive.IsReady && drive.TotalSize > 0)
+                .ToArray();
+            if (drives.Length == 0)
             {
                 return;
             }
 
-            var drive = new DriveInfo(systemRoot);
-            if (!drive.IsReady || drive.TotalSize <= 0)
-            {
-                return;
-            }
-
-            var percent = Math.Clamp(drive.AvailableFreeSpace * 100d / drive.TotalSize, 0d, 100d);
+            var total = drives.Sum(drive => drive.TotalSize);
+            var free = drives.Sum(drive => drive.AvailableFreeSpace);
+            var percent = Math.Clamp(free * 100d / total, 0d, 100d);
             FreeSpaceText.Text = $"{percent:0.#}%";
             FreeSpaceProgress.Value = percent;
+            RenderDiskUsage(new DiskUsageSnapshot(total,
+            [
+                new DiskUsageSegment("Прочее", Math.Max(0, total - free), "#A9B0C2"),
+                new DiskUsageSegment("Свободно", free, "#B8B1F6")
+            ], 0, drives.Select(drive => new DiskUsageDriveSummary(drive.RootDirectory.FullName, drive.TotalSize, drive.AvailableFreeSpace)).ToArray()));
         }
         catch (IOException)
         {
@@ -412,6 +428,146 @@ public partial class MainWindow : Window
         catch (UnauthorizedAccessException)
         {
         }
+    }
+
+    private async Task UpdateDiskUsageAsync()
+    {
+        _diskUsageCancellation?.Cancel();
+        _diskUsageCancellation?.Dispose();
+        _diskUsageCancellation = new CancellationTokenSource();
+        ShowDiskUsageLoading();
+        try
+        {
+            var snapshot = await _diskUsageService.ReadAsync(_selectedDriveRoots, _diskUsageCancellation.Token);
+            if (snapshot is not null && !_diskUsageCancellation.IsCancellationRequested)
+            {
+                RenderDiskUsage(snapshot);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private void ShowDiskUsageLoading()
+    {
+        StatusDetails.Text = "Подсчитываем занятое место по выбранным дискам...";
+        DiskLegendPanel.Children.Clear();
+        DiskLegendPanel.Children.Add(new TextBlock
+        {
+            Text = "Подробная легенда формируется...",
+            Foreground = (Brush)FindResource("Ink"),
+            FontSize = 11,
+            FontWeight = FontWeights.SemiBold,
+            TextWrapping = TextWrapping.Wrap,
+            Width = 205
+        });
+        DiskLegendPanel.Children.Add(new TextBlock
+        {
+            Text = $"Выбрано дисков: {_selectedDriveRoots.Count}\nЧитаем каталоги Windows, программ и пользователей",
+            Foreground = (Brush)FindResource("Muted"),
+            FontSize = 10,
+            TextWrapping = TextWrapping.Wrap,
+            Width = 205,
+            Margin = new Thickness(0, 4, 0, 0)
+        });
+
+        _diskUsageLoadingPath = new System.Windows.Shapes.Path
+        {
+            Stroke = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#6C5CE7")),
+            StrokeThickness = 12,
+            Data = CreateArc(72.5, 66.5, -90, 70),
+            RenderTransform = new RotateTransform { CenterX = 72.5, CenterY = 72.5 }
+        };
+        DiskUsageRing.Children.Add(_diskUsageLoadingPath);
+        var animation = new DoubleAnimation(0, 360, new Duration(TimeSpan.FromMilliseconds(900)))
+        {
+            RepeatBehavior = RepeatBehavior.Forever
+        };
+        ((RotateTransform)_diskUsageLoadingPath.RenderTransform).BeginAnimation(RotateTransform.AngleProperty, animation);
+    }
+
+    private void RenderDiskUsage(DiskUsageSnapshot snapshot)
+    {
+        var free = snapshot.Segments.FirstOrDefault(segment => segment.Name == "Свободно")?.Bytes ?? 0;
+        var percent = snapshot.TotalBytes <= 0 ? 0 : Math.Clamp(free * 100d / snapshot.TotalBytes, 0d, 100d);
+        FreeSpaceText.Text = $"{percent:0.#}%";
+        FreeSpaceProgress.Value = percent;
+        if (snapshot.SkippedDrives > 0)
+        {
+            StatusDetails.Text = $"Доступные данные по дискам · не удалось прочитать: {snapshot.SkippedDrives}";
+        }
+        else if (snapshot.FromCache)
+        {
+            StatusDetails.Text = "Данные использования диска взяты из кэша · пересчёт не потребовался";
+        }
+
+        DiskUsageRing.Children.Clear();
+        DiskUsageRing.Children.Add(new System.Windows.Shapes.Ellipse { Width = 145, Height = 145, Stroke = (Brush)FindResource("Line"), StrokeThickness = 12 });
+        const double center = 72.5;
+        const double radius = 66.5;
+        var angle = -90d;
+        foreach (var segment in snapshot.Segments.Where(segment => segment.Bytes > 0))
+        {
+            var sweep = segment.Bytes * 360d / snapshot.TotalBytes;
+            var visibleSweep = Math.Max(0.5, sweep - 1.5);
+            var path = new System.Windows.Shapes.Path
+            {
+                Stroke = new SolidColorBrush((Color)ColorConverter.ConvertFromString(segment.Color)),
+                StrokeThickness = 12,
+                Data = CreateArc(center, radius, angle, visibleSweep)
+            };
+            DiskUsageRing.Children.Add(path);
+            angle += sweep;
+        }
+
+        DiskLegendPanel.Children.Clear();
+        foreach (var segment in snapshot.Segments.Where(segment => segment.Bytes > 0))
+        {
+            var share = segment.Bytes * 100d / snapshot.TotalBytes;
+            var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 2, 0, 2) };
+            row.Children.Add(new Border { Width = 8, Height = 8, CornerRadius = new CornerRadius(4), Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString(segment.Color)), Margin = new Thickness(0, 0, 6, 0), VerticalAlignment = VerticalAlignment.Center });
+            row.Children.Add(new TextBlock { Text = $"{segment.Name}: {ByteSizeFormatter.Format(segment.Bytes)} ({share:0.#}%)", Foreground = (Brush)FindResource("Muted"), FontSize = 11, TextTrimming = TextTrimming.CharacterEllipsis, Width = 122 });
+            DiskLegendPanel.Children.Add(row);
+        }
+
+        var drives = snapshot.Drives ?? [];
+        if (drives.Count > 0)
+        {
+            DiskLegendPanel.Children.Add(new TextBlock { Text = $"Выбрано дисков: {drives.Count}", Foreground = (Brush)FindResource("Ink"), FontSize = 11, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 7, 0, 1) });
+            foreach (var drive in drives)
+            {
+                var root = drive.Root.TrimEnd('\\');
+                var share = drive.TotalBytes <= 0 ? 0 : drive.FreeBytes * 100d / drive.TotalBytes;
+                DiskLegendPanel.Children.Add(new TextBlock
+                {
+                    Text = $"{root}: {ByteSizeFormatter.Format(drive.TotalBytes)} · свободно {ByteSizeFormatter.Format(drive.FreeBytes)} ({share:0.#}%)",
+                    Foreground = (Brush)FindResource("Muted"),
+                    FontSize = 10,
+                    TextTrimming = TextTrimming.CharacterEllipsis,
+                    Width = 205
+                });
+            }
+        }
+    }
+
+    private static StreamGeometry CreateArc(double center, double radius, double startAngle, double sweepAngle)
+    {
+        static Point PointAt(double center, double radius, double angle)
+        {
+            var radians = angle * Math.PI / 180d;
+            return new Point(center + radius * Math.Cos(radians), center + radius * Math.Sin(radians));
+        }
+
+        var geometry = new StreamGeometry();
+        using (var context = geometry.Open())
+        {
+            context.BeginFigure(PointAt(center, radius, startAngle), false, false);
+            context.ArcTo(PointAt(center, radius, startAngle + sweepAngle), new Size(radius, radius), 0, sweepAngle >= 180, SweepDirection.Clockwise, true, false);
+        }
+
+        geometry.Freeze();
+        return geometry;
     }
 
     private void RestoreLatestActivity()
