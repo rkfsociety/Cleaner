@@ -5,10 +5,19 @@ namespace Cleaner;
 
 public sealed class CleanupPolicyService
 {
-    private readonly string _policyPath = Path.Combine(
+    private readonly string _policyPath;
+
+    public CleanupPolicyService() : this(Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "Cleaner",
-        "policy.json");
+        "policy.json"))
+    {
+    }
+
+    internal CleanupPolicyService(string policyPath)
+    {
+        _policyPath = policyPath;
+    }
 
     public int LoadMinimumAgeHours()
     {

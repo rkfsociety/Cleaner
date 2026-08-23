@@ -14,4 +14,15 @@
     <Resource Include="assets\cleaner-icon.ico" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Remove="Cleaner.Tests\**" />
+    <Compile Remove="publish\**" />
+    <EmbeddedResource Remove="Cleaner.Tests\**" />
+    <EmbeddedResource Remove="publish\**" />
+    <None Remove="Cleaner.Tests\**" />
+    <None Remove="publish\**" />
+    <Page Remove="Cleaner.Tests\**" />
+    <Page Remove="publish\**" />
+  </ItemGroup>
+
 </Project>

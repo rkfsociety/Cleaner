@@ -52,21 +52,31 @@ public sealed class CleanerScanService
                 reclaimed += stats.ReclaimedBytes;
             }
 
-            if (deleteRecycleBin && result.RecycleBin.Items > 0 && new RecycleBinService().Empty(drives))
+            if (deleteRecycleBin)
             {
-                deleted += result.RecycleBin.Items;
-                reclaimed += result.RecycleBin.Bytes;
-            }
-            else if (deleteRecycleBin && result.RecycleBin.Items > 0)
-            {
-                skipped += result.RecycleBin.Items;
+                var recycleBinService = new RecycleBinService();
+                var beforeEmpty = recycleBinService.GetInfoPerRoot(drives);
+                var emptyResults = recycleBinService.EmptyPerRoot(drives);
+                foreach (var (root, succeeded) in emptyResults)
+                {
+                    var info = beforeEmpty.TryGetValue(root, out var value) ? value : new RecycleBinInfo(0, 0);
+                    if (succeeded)
+                    {
+                        deleted += info.Items;
+                        reclaimed += info.Bytes;
+                    }
+                    else
+                    {
+                        skipped += info.Items;
+                    }
+                }
             }
 
             return new CleanupResult(deleted, skipped, reclaimed);
         }, cancellationToken);
     }
 
-    private static IReadOnlyList<string> NormalizeDrives(IEnumerable<string> drives)
+    internal static IReadOnlyList<string> NormalizeDrives(IEnumerable<string> drives)
     {
         return drives
             .Where(root => !string.IsNullOrWhiteSpace(root))
@@ -75,31 +85,16 @@ public sealed class CleanerScanService
             .ToArray();
     }
 
-    private static IReadOnlyList<string> BuildWindowsTempRoots(IEnumerable<string> drives)
+    internal static IReadOnlyList<string> BuildWindowsTempRoots(IEnumerable<string> drives)
     {
-        var roots = new List<string>();
         var windowsRoot = Path.GetPathRoot(Environment.GetFolderPath(Environment.SpecialFolder.Windows));
-        foreach (var drive in drives)
+        if (windowsRoot is null || !drives.Contains(windowsRoot, StringComparer.OrdinalIgnoreCase))
         {
-            var driveRoot = Path.GetPathRoot(drive);
-            if (driveRoot is null)
-            {
-                continue;
-            }
-
-            var candidates = new[]
-            {
-                string.Equals(driveRoot, windowsRoot, StringComparison.OrdinalIgnoreCase)
-                    ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "Temp")
-                    : null,
-                Path.Combine(driveRoot, "Temp"),
-                Path.Combine(driveRoot, "Windows", "Temp")
-            };
-
-            roots.AddRange(candidates.Where(path => path is not null && Directory.Exists(path))!);
+            return [];
         }
 
-        return roots.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        var systemTemp = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "Temp");
+        return Directory.Exists(systemTemp) ? [systemTemp] : [];
     }
 
     private static IReadOnlyList<string> BuildUserCleanupRoots(IEnumerable<string> drives)
@@ -185,6 +180,7 @@ public sealed class CleanerScanService
             return files;
         }
 
+        var bytesFound = 0L;
         var pending = new Stack<string>();
         pending.Push(path);
         while (pending.Count > 0)
@@ -198,10 +194,12 @@ public sealed class CleanerScanService
                     cancellationToken.ThrowIfCancellationRequested();
                     try
                     {
-                        files.Add(new ScanFile(file, new FileInfo(file).Length));
+                        var length = new FileInfo(file).Length;
+                        files.Add(new ScanFile(file, length));
+                        bytesFound += length;
                         if (files.Count % 128 == 0)
                         {
-                            progress?.Report(new ScanProgress(stage, files.Count, files.Sum(item => item.Bytes)));
+                            progress?.Report(new ScanProgress(stage, files.Count, bytesFound));
                         }
                     }
                     catch (UnauthorizedAccessException) { }
@@ -228,7 +226,7 @@ public sealed class CleanerScanService
         return files;
     }
 
-    private static CleanupResult DeleteFiles(IEnumerable<ScanFile> files, IEnumerable<string> roots, int minimumAgeHours, CancellationToken cancellationToken)
+    internal static CleanupResult DeleteFiles(IEnumerable<ScanFile> files, IEnumerable<string> roots, int minimumAgeHours, CancellationToken cancellationToken)
     {
         var fullRoots = roots
             .Select(root => Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar)

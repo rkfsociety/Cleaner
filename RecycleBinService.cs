@@ -26,30 +26,38 @@ public sealed class RecycleBinService
 
     public RecycleBinInfo GetInfo(IEnumerable<string>? roots = null)
     {
-        var totalBytes = 0L;
-        var totalItems = 0L;
-        foreach (var root in roots ?? [null!])
-        {
-            var info = new QueryInfo { Size = Marshal.SizeOf<QueryInfo>() };
-            if (SHQueryRecycleBin(root, ref info) == 0)
-            {
-                totalBytes += info.Bytes;
-                totalItems += info.Items;
-            }
-        }
-
+        var perRoot = GetInfoPerRoot(roots);
+        var totalBytes = perRoot.Values.Sum(info => info.Bytes);
+        var totalItems = perRoot.Values.Sum(info => (long)info.Items);
         return new RecycleBinInfo(totalBytes, checked((int)Math.Min(totalItems, int.MaxValue)));
     }
 
-    public bool Empty(IEnumerable<string>? roots = null)
+    public IReadOnlyDictionary<string, RecycleBinInfo> GetInfoPerRoot(IEnumerable<string>? roots = null)
     {
-        var success = true;
+        var results = new Dictionary<string, RecycleBinInfo>(StringComparer.OrdinalIgnoreCase);
+        foreach (var root in roots ?? [null!])
+        {
+            var info = new QueryInfo { Size = Marshal.SizeOf<QueryInfo>() };
+            var key = root ?? string.Empty;
+            results[key] = SHQueryRecycleBin(root, ref info) == 0
+                ? new RecycleBinInfo(info.Bytes, checked((int)Math.Min(info.Items, int.MaxValue)))
+                : new RecycleBinInfo(0, 0);
+        }
+
+        return results;
+    }
+
+    private const int RecycleBinAlreadyEmpty = unchecked((int)0x8000FFFF);
+
+    public IReadOnlyDictionary<string, bool> EmptyPerRoot(IEnumerable<string>? roots = null)
+    {
+        var results = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
         foreach (var root in roots ?? [null!])
         {
             var result = SHEmptyRecycleBin(IntPtr.Zero, root, NoConfirmation | NoProgressUi | NoSound);
-            success &= result == 0;
+            results[root ?? string.Empty] = result == 0 || result == RecycleBinAlreadyEmpty;
         }
 
-        return success;
+        return results;
     }
 }
