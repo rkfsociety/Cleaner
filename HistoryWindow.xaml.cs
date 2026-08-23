@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Controls;
 
 namespace Cleaner;
 
@@ -15,11 +16,15 @@ public partial class HistoryWindow : Window
 
     private void Reload()
     {
-        HistoryList.ItemsSource = _historyService.LoadAll().Select(entry => new HistoryRow(
+        var rows = _historyService.LoadAll().Select(entry => new HistoryRow(
             entry.Timestamp.LocalDateTime.ToString("dd.MM.yyyy HH:mm"),
             entry.Scope,
             entry.DeletedFiles.ToString("N0"),
-            FormatBytes(entry.ReclaimedBytes)));
+            FormatBytes(entry.ReclaimedBytes))).ToArray();
+        HistoryList.ItemsSource = rows;
+        HistoryList.SetValue(
+            ScrollViewer.VerticalScrollBarVisibilityProperty,
+            rows.Length > 10 ? ScrollBarVisibility.Auto : ScrollBarVisibility.Hidden);
     }
 
     private void ClearHistoryButton_Click(object sender, RoutedEventArgs e)
