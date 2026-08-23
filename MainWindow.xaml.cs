@@ -9,6 +9,7 @@ public partial class MainWindow : Window
 {
     private readonly CleanerScanService _scanService = new();
     private readonly CleanupHistoryService _historyService = new();
+    private readonly CleanerSettingsService _settingsService = new();
     private IReadOnlyList<string> _selectedDriveRoots;
     private CancellationTokenSource? _scanCancellation;
     private ScanResult? _lastScan;
@@ -25,7 +26,7 @@ public partial class MainWindow : Window
 
         WelcomeText.Text = $"Добрый день, {userName}";
         UserInitialText.Text = userName[..1].ToUpperInvariant();
-        _selectedDriveRoots = GetDefaultDriveRoots();
+        _selectedDriveRoots = _settingsService.LoadSelectedDrives(GetDefaultDriveRoots());
         DriveButton.Content = $"Диски: {_selectedDriveRoots.Count}";
         UpdateFreeSpaceIndicator();
         RestoreLatestActivity();
@@ -198,6 +199,7 @@ public partial class MainWindow : Window
         if (dialog.ShowDialog() == true)
         {
             _selectedDriveRoots = dialog.SelectedDrives;
+            _settingsService.SaveSelectedDrives(_selectedDriveRoots);
             DriveButton.Content = $"Диски: {_selectedDriveRoots.Count}";
             _lastScan = null;
             CleanButton.IsEnabled = false;
