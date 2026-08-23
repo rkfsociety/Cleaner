@@ -19,9 +19,7 @@ public sealed class CleanerScanService
         return Task.Run(() =>
         {
             var drives = NormalizeDrives(selectedDrives);
-            var userTemp = IsOnSelectedDrive(Path.GetTempPath(), drives)
-                ? ScanDirectory(Path.GetTempPath(), cancellationToken)
-                : [];
+            var userTemp = ScanMany(BuildUserCleanupRoots(drives), cancellationToken);
             var windowsTemp = ScanMany(BuildWindowsTempRoots(drives), cancellationToken);
             return new ScanResult(userTemp, windowsTemp, new RecycleBinService().GetInfo(drives));
         }, cancellationToken);
@@ -35,7 +33,7 @@ public sealed class CleanerScanService
             var deleted = 0;
             if (deleteUserTemp)
             {
-                deleted += DeleteFiles(result.UserTempFiles, [Path.GetTempPath()], cancellationToken);
+                deleted += DeleteFiles(result.UserTempFiles, BuildUserCleanupRoots(drives), cancellationToken);
             }
 
             if (deleteWindowsTemp)
@@ -86,6 +84,64 @@ public sealed class CleanerScanService
         }
 
         return roots.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+    }
+
+    private static IReadOnlyList<string> BuildUserCleanupRoots(IEnumerable<string> drives)
+    {
+        var roots = new List<string>();
+        if (IsOnSelectedDrive(Path.GetTempPath(), drives))
+        {
+            roots.Add(Path.GetTempPath());
+            roots.AddRange(BuildBrowserCacheRoots());
+        }
+
+        return roots.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+    }
+
+    private static IReadOnlyList<string> BuildBrowserCacheRoots()
+    {
+        var roots = new List<string>();
+        var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        var browserDataRoots = new[]
+        {
+            Path.Combine(localAppData, "Google", "Chrome", "User Data"),
+            Path.Combine(localAppData, "Microsoft", "Edge", "User Data")
+        };
+
+        foreach (var browserRoot in browserDataRoots)
+        {
+            try
+            {
+                foreach (var profile in Directory.EnumerateDirectories(browserRoot))
+                {
+                    roots.AddRange(new[]
+                    {
+                        Path.Combine(profile, "Cache", "Cache_Data"),
+                        Path.Combine(profile, "Code Cache"),
+                        Path.Combine(profile, "GPUCache")
+                    }.Where(Directory.Exists));
+                }
+            }
+            catch (UnauthorizedAccessException) { }
+            catch (IOException) { }
+        }
+
+        var firefoxProfiles = Path.Combine(localAppData, "Mozilla", "Firefox", "Profiles");
+        try
+        {
+            foreach (var profile in Directory.EnumerateDirectories(firefoxProfiles))
+            {
+                var cache = Path.Combine(profile, "cache2", "entries");
+                if (Directory.Exists(cache))
+                {
+                    roots.Add(cache);
+                }
+            }
+        }
+        catch (UnauthorizedAccessException) { }
+        catch (IOException) { }
+
+        return roots;
     }
 
     private static bool IsOnSelectedDrive(string path, IEnumerable<string> drives)
