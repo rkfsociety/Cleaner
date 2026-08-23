@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO;
 using System.Security.Principal;
 using System.Text;
@@ -131,8 +132,18 @@ public partial class MainWindow : Window
             return;
         }
 
+        var selectedBytes = (deleteUserTemp ? _lastScan.UserTempBytes : 0) +
+            (deleteWindowsTemp ? _lastScan.WindowsTempBytes : 0) +
+            (deleteRecycleBin ? _lastScan.RecycleBin.Bytes : 0);
+        var runningBrowsers = new[] { "chrome", "msedge", "firefox" }
+            .Where(name => Process.GetProcessesByName(name).Length > 0)
+            .ToArray();
+        var browserWarning = runningBrowsers.Length > 0
+            ? $"\n\nЗапущены: {string.Join(", ", runningBrowsers)}. Их занятые файлы кэша будут пропущены."
+            : string.Empty;
+
         var confirmation = MessageBox.Show(
-            "Удалить выбранные данные? Занятые и недоступные файлы будут пропущены.",
+            $"Удалить выбранные данные (до {FormatBytes(selectedBytes)})? Занятые и недоступные файлы будут пропущены.{browserWarning}",
             "Подтверждение очистки",
             MessageBoxButton.YesNo,
             MessageBoxImage.Warning);
