@@ -11,7 +11,7 @@
             </StackPanel>
             <StackPanel>
                 <TextBlock Text="Выбор дисков" Foreground="#192033" FontSize="22" FontWeight="SemiBold" />
-                <TextBlock Text="Корзина и известные временные папки будут проверены только на выбранных дисках" Foreground="#7D8497" FontSize="13" TextWrapping="Wrap" Margin="0,6,0,10" />
+                <TextBlock Text="По умолчанию выбран системный диск. Проверяются только известные Temp, кэши браузеров и корзина — произвольные папки диска не сканируются." Foreground="#7D8497" FontSize="13" TextWrapping="Wrap" Margin="0,6,0,10" />
                 <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
                     <Button Content="Выбрать все" Click="SelectAllButton_Click" Padding="12,6" Margin="0,0,8,0" />
                     <Button Content="Снять все" Click="ClearAllButton_Click" Padding="12,6" />

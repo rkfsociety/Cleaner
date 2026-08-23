@@ -13,11 +13,13 @@ public partial class DriveSelectionWindow : Window
     {
         InitializeComponent();
 
+        var systemRoot = WindowsDriveService.GetSystemDriveRoot();
         foreach (var drive in DriveInfo.GetDrives().Where(item => item.IsReady && item.DriveType == DriveType.Fixed))
         {
+            var isSystemDrive = string.Equals(drive.RootDirectory.FullName, systemRoot, StringComparison.OrdinalIgnoreCase);
             var check = new CheckBox
             {
-                Content = $"{drive.Name}  {drive.VolumeLabel}  · свободно {FormatBytes(drive.AvailableFreeSpace)} из {FormatBytes(drive.TotalSize)}",
+                Content = $"{drive.Name}  {drive.VolumeLabel}{(isSystemDrive ? "  · системный диск" : string.Empty)}  · свободно {FormatBytes(drive.AvailableFreeSpace)} из {FormatBytes(drive.TotalSize)}",
                 Tag = drive.RootDirectory.FullName,
                 IsChecked = selectedDrives.Contains(drive.RootDirectory.FullName, StringComparer.OrdinalIgnoreCase),
                 FontSize = 14,

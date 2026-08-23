@@ -14,7 +14,7 @@ public partial class SettingsWindow : Window
         AgeFilterCheckBox.IsChecked = minimumFileAgeHours > 0;
         var isAdministrator = new WindowsPrincipal(WindowsIdentity.GetCurrent()).IsInRole(WindowsBuiltInRole.Administrator);
         AdminStatusText.Text = $"Права администратора: {(isAdministrator ? "включены" : "не включены")}";
-        DriveStatusText.Text = $"Выбрано дисков: {selectedDriveCount}";
+        DriveStatusText.Text = $"Выбрано дисков: {selectedDriveCount}; системный диск: {WindowsDriveService.GetSystemDriveRoot().TrimEnd('\\')}";
     }
 
     private void SaveButton_Click(object sender, RoutedEventArgs e)

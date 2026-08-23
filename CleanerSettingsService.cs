@@ -28,6 +28,26 @@ public sealed class CleanerSettingsService
         catch (UnauthorizedAccessException) { return availableDrives; }
     }
 
+    public IReadOnlyList<string> LoadSelectedDrives(IReadOnlyList<string> availableDrives, string defaultDrive)
+    {
+        try
+        {
+            if (!File.Exists(_settingsPath))
+            {
+                return availableDrives.Contains(defaultDrive, StringComparer.OrdinalIgnoreCase)
+                    ? [defaultDrive]
+                    : availableDrives;
+            }
+
+            var saved = JsonSerializer.Deserialize<List<string>>(File.ReadAllText(_settingsPath));
+            var selected = availableDrives.Where(drive => saved?.Contains(drive, StringComparer.OrdinalIgnoreCase) == true).ToArray();
+            return selected.Length > 0 ? selected : [defaultDrive];
+        }
+        catch (JsonException) { return [defaultDrive]; }
+        catch (IOException) { return [defaultDrive]; }
+        catch (UnauthorizedAccessException) { return [defaultDrive]; }
+    }
+
     public void SaveSelectedDrives(IEnumerable<string> drives)
     {
         try

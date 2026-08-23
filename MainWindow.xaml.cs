@@ -28,9 +28,9 @@ public partial class MainWindow : Window
 
         WelcomeText.Text = $"Добрый день, {userName}";
         UserInitialText.Text = userName[..1].ToUpperInvariant();
-        _selectedDriveRoots = _settingsService.LoadSelectedDrives(GetDefaultDriveRoots());
+        _selectedDriveRoots = _settingsService.LoadSelectedDrives(GetDefaultDriveRoots(), WindowsDriveService.GetSystemDriveRoot());
         _minimumFileAgeHours = _policyService.LoadMinimumAgeHours();
-        DriveButton.Content = $"Диски: {_selectedDriveRoots.Count}";
+        DriveButton.Content = $"Диски: {_selectedDriveRoots.Count} · системный {WindowsDriveService.GetSystemDriveRoot().TrimEnd('\\')}";
         UpdateFreeSpaceIndicator();
         RestoreLatestActivity();
     }
@@ -221,7 +221,7 @@ public partial class MainWindow : Window
         {
             _selectedDriveRoots = dialog.SelectedDrives;
             _settingsService.SaveSelectedDrives(_selectedDriveRoots);
-            DriveButton.Content = $"Диски: {_selectedDriveRoots.Count}";
+            DriveButton.Content = $"Диски: {_selectedDriveRoots.Count} · системный {WindowsDriveService.GetSystemDriveRoot().TrimEnd('\\')}";
             _lastScan = null;
             CleanButton.IsEnabled = false;
             DetailsButton.IsEnabled = false;
@@ -262,11 +262,7 @@ public partial class MainWindow : Window
 
     private static IReadOnlyList<string> GetDefaultDriveRoots()
     {
-        var drives = DriveInfo.GetDrives()
-            .Where(drive => drive.IsReady && drive.DriveType == DriveType.Fixed)
-            .Select(drive => drive.RootDirectory.FullName)
-            .ToArray();
-        return drives.Length > 0 ? drives : [Path.GetPathRoot(Environment.SystemDirectory)!];
+        return WindowsDriveService.GetFixedDriveRoots();
     }
 
     private void UpdateFreeSpaceIndicator()
