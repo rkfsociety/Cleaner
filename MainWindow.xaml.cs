@@ -51,10 +51,15 @@ public partial class MainWindow : Window
         ScanButton.IsEnabled = true;
         StatusText.Text = "Идёт проверка";
         StatusDetails.Text = "Анализируем временные файлы и кэш";
+        ScanProgressBar.Visibility = Visibility.Visible;
+        var progress = new Progress<ScanProgress>(update =>
+        {
+            StatusDetails.Text = $"{update.Stage}: найдено {update.FilesFound:N0} файлов ({FormatBytes(update.BytesFound)})";
+        });
 
         try
         {
-            var result = await _scanService.ScanAsync(_selectedDriveRoots, _scanCancellation.Token);
+            var result = await _scanService.ScanAsync(_selectedDriveRoots, _scanCancellation.Token, progress);
             _lastScan = result;
 
             StatusText.Text = result.TotalBytes == 0 ? "Всё чисто" : $"Найдено {FormatBytes(result.TotalBytes)}";
@@ -92,6 +97,7 @@ public partial class MainWindow : Window
         {
             _scanCancellation.Dispose();
             _scanCancellation = null;
+            ScanProgressBar.Visibility = Visibility.Collapsed;
             ScanButton.IsEnabled = true;
             ScanButton.Content = "Начать проверку";
         }
@@ -160,6 +166,7 @@ public partial class MainWindow : Window
         CleanButton.IsEnabled = false;
         ScanButton.IsEnabled = false;
         CleanButton.Content = "Очищаем...";
+        ScanProgressBar.Visibility = Visibility.Visible;
         try
         {
             var cleanup = await _scanService.DeleteAsync(_lastScan, _selectedDriveRoots, deleteUserTemp, deleteWindowsTemp, deleteRecycleBin, _minimumFileAgeHours);
@@ -188,6 +195,7 @@ public partial class MainWindow : Window
         {
             CleanButton.IsEnabled = false;
             CleanButton.Content = "Очистить выбранное";
+            ScanProgressBar.Visibility = Visibility.Collapsed;
             ScanButton.IsEnabled = true;
         }
     }

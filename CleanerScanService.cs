@@ -4,6 +4,7 @@ namespace Cleaner;
 
 public sealed record ScanFile(string Path, long Bytes);
 public sealed record CleanupResult(int DeletedFiles, int SkippedFiles, long ReclaimedBytes);
+public sealed record ScanProgress(string Stage, int FilesFound, long BytesFound);
 
 public sealed record ScanResult(IReadOnlyList<ScanFile> UserTempFiles, IReadOnlyList<ScanFile> WindowsTempFiles, RecycleBinInfo RecycleBin)
 {
@@ -15,13 +16,14 @@ public sealed record ScanResult(IReadOnlyList<ScanFile> UserTempFiles, IReadOnly
 
 public sealed class CleanerScanService
 {
-    public Task<ScanResult> ScanAsync(IEnumerable<string> selectedDrives, CancellationToken cancellationToken = default)
+    public Task<ScanResult> ScanAsync(IEnumerable<string> selectedDrives, CancellationToken cancellationToken = default, IProgress<ScanProgress>? progress = null)
     {
         return Task.Run(() =>
         {
             var drives = NormalizeDrives(selectedDrives);
-            var userTemp = ScanMany(BuildUserCleanupRoots(drives), cancellationToken);
-            var windowsTemp = ScanMany(BuildWindowsTempRoots(drives), cancellationToken);
+            var userTemp = ScanMany(BuildUserCleanupRoots(drives), "Временные файлы и кэш пользователя", cancellationToken, progress);
+            var windowsTemp = ScanMany(BuildWindowsTempRoots(drives), "Системные временные файлы", cancellationToken, progress);
+            progress?.Report(new ScanProgress("Корзина", userTemp.Count + windowsTemp.Count, userTemp.Sum(file => file.Bytes) + windowsTemp.Sum(file => file.Bytes)));
             return new ScanResult(userTemp, windowsTemp, new RecycleBinService().GetInfo(drives));
         }, cancellationToken);
     }
@@ -164,18 +166,18 @@ public sealed class CleanerScanService
         return root is not null && drives.Contains(root, StringComparer.OrdinalIgnoreCase);
     }
 
-    private static List<ScanFile> ScanMany(IEnumerable<string> paths, CancellationToken cancellationToken)
+    private static List<ScanFile> ScanMany(IEnumerable<string> paths, string stage, CancellationToken cancellationToken, IProgress<ScanProgress>? progress)
     {
         var files = new List<ScanFile>();
         foreach (var path in paths)
         {
-            files.AddRange(ScanDirectory(path, cancellationToken));
+            files.AddRange(ScanDirectory(path, stage, cancellationToken, progress));
         }
 
         return files;
     }
 
-    private static List<ScanFile> ScanDirectory(string path, CancellationToken cancellationToken)
+    private static List<ScanFile> ScanDirectory(string path, string stage, CancellationToken cancellationToken, IProgress<ScanProgress>? progress)
     {
         var files = new List<ScanFile>();
         if (!Directory.Exists(path))
@@ -194,7 +196,14 @@ public sealed class CleanerScanService
                 foreach (var file in Directory.EnumerateFiles(current))
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    try { files.Add(new ScanFile(file, new FileInfo(file).Length)); }
+                    try
+                    {
+                        files.Add(new ScanFile(file, new FileInfo(file).Length));
+                        if (files.Count % 128 == 0)
+                        {
+                            progress?.Report(new ScanProgress(stage, files.Count, files.Sum(item => item.Bytes)));
+                        }
+                    }
                     catch (UnauthorizedAccessException) { }
                     catch (IOException) { }
                 }
