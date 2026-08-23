@@ -224,7 +224,7 @@ public partial class MainWindow : Window
 
     private void HistoryButton_Click(object sender, RoutedEventArgs e)
     {
-        var dialog = new HistoryWindow(_historyService.LoadAll()) { Owner = this };
+        var dialog = new HistoryWindow(_historyService) { Owner = this };
         dialog.ShowDialog();
     }
 

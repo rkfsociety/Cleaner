@@ -16,6 +16,9 @@
                     </GridView>
                 </ListView.View>
             </ListView>
+            <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,14,0,0">
+                <Button Content="Очистить историю" Click="ClearHistoryButton_Click" Padding="14,8" />
+            </StackPanel>
         </DockPanel>
     </Border>
 </Window>

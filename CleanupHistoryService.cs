@@ -70,4 +70,17 @@ public sealed class CleanupHistoryService
         catch (IOException) { }
         catch (UnauthorizedAccessException) { }
     }
+
+    public void Clear()
+    {
+        try
+        {
+            if (File.Exists(_historyPath))
+            {
+                File.Delete(_historyPath);
+            }
+        }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
+    }
 }
