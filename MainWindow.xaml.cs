@@ -10,6 +10,7 @@ public partial class MainWindow : Window
     private readonly CleanerScanService _scanService = new();
     private readonly CleanupHistoryService _historyService = new();
     private IReadOnlyList<string> _selectedDriveRoots;
+    private CancellationTokenSource? _scanCancellation;
     private ScanResult? _lastScan;
 
     public MainWindow()
@@ -32,16 +33,24 @@ public partial class MainWindow : Window
 
     private async void ScanButton_Click(object sender, RoutedEventArgs e)
     {
+        if (_scanCancellation is not null)
+        {
+            _scanCancellation.Cancel();
+            return;
+        }
+
+        _scanCancellation = new CancellationTokenSource();
         ScanButton.IsEnabled = false;
         CleanButton.IsEnabled = false;
         DetailsButton.IsEnabled = false;
-        ScanButton.Content = "Проверяем...";
+        ScanButton.Content = "Отменить";
+        ScanButton.IsEnabled = true;
         StatusText.Text = "Идёт проверка";
         StatusDetails.Text = "Анализируем временные файлы и кэш";
 
         try
         {
-            var result = await _scanService.ScanAsync(_selectedDriveRoots);
+            var result = await _scanService.ScanAsync(_selectedDriveRoots, _scanCancellation.Token);
             _lastScan = result;
 
             StatusText.Text = result.TotalBytes == 0 ? "Всё чисто" : $"Найдено {FormatBytes(result.TotalBytes)}";
@@ -66,8 +75,19 @@ public partial class MainWindow : Window
             ActivityResultText.Text = exception.Message;
             _lastScan = null;
         }
+        catch (OperationCanceledException)
+        {
+            StatusText.Text = "Проверка отменена";
+            StatusDetails.Text = "Можно запустить её снова в любой момент";
+            ActivityText.Text = "Проверка отменена пользователем";
+            ActivityResultText.Text = "Данные не удалялись";
+            ActivitySizeText.Text = "Выберите категории после новой проверки";
+            _lastScan = null;
+        }
         finally
         {
+            _scanCancellation.Dispose();
+            _scanCancellation = null;
             ScanButton.IsEnabled = true;
             ScanButton.Content = "Начать проверку";
         }
