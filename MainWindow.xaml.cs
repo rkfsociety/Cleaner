@@ -25,6 +25,7 @@ public partial class MainWindow : Window
         UserInitialText.Text = userName[..1].ToUpperInvariant();
         _selectedDriveRoots = GetDefaultDriveRoots();
         DriveButton.Content = $"Диски: {_selectedDriveRoots.Count}";
+        UpdateFreeSpaceIndicator();
         RestoreLatestActivity();
     }
 
@@ -197,6 +198,34 @@ public partial class MainWindow : Window
             .Select(drive => drive.RootDirectory.FullName)
             .ToArray();
         return drives.Length > 0 ? drives : [Path.GetPathRoot(Environment.SystemDirectory)!];
+    }
+
+    private void UpdateFreeSpaceIndicator()
+    {
+        try
+        {
+            var systemRoot = Path.GetPathRoot(Environment.SystemDirectory);
+            if (string.IsNullOrWhiteSpace(systemRoot))
+            {
+                return;
+            }
+
+            var drive = new DriveInfo(systemRoot);
+            if (!drive.IsReady || drive.TotalSize <= 0)
+            {
+                return;
+            }
+
+            var percent = Math.Clamp(drive.AvailableFreeSpace * 100d / drive.TotalSize, 0d, 100d);
+            FreeSpaceText.Text = $"{percent:0.#}%";
+            FreeSpaceProgress.Value = percent;
+        }
+        catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
     }
 
     private void RestoreLatestActivity()
