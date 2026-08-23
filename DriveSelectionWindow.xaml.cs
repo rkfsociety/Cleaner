@@ -23,7 +23,8 @@ public partial class DriveSelectionWindow : Window
                 Tag = drive.RootDirectory.FullName,
                 IsChecked = selectedDrives.Contains(drive.RootDirectory.FullName, StringComparer.OrdinalIgnoreCase),
                 FontSize = 14,
-                Padding = new Thickness(6),
+                Padding = new Thickness(0),
+                VerticalContentAlignment = VerticalAlignment.Center,
                 Margin = new Thickness(0, 3, 0, 3)
             };
             _driveChecks.Add(check);
