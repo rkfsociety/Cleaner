@@ -4,9 +4,14 @@
         Title="История очисток" Width="760" Height="480" ResizeMode="NoResize"
         WindowStartupLocation="CenterOwner" Background="#F7F8FC" FontFamily="Segoe UI">
     <Border Margin="18" Background="White" CornerRadius="16" Padding="24">
-        <DockPanel>
-            <TextBlock DockPanel.Dock="Top" Text="История очисток" Foreground="#192033" FontSize="22" FontWeight="SemiBold" Margin="0,0,0,18" />
-            <ListView x:Name="HistoryList" BorderThickness="0" Background="Transparent" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <TextBlock Grid.Row="0" Text="История очисток" Foreground="#192033" FontSize="22" FontWeight="SemiBold" Margin="0,0,0,18" />
+            <ListView Grid.Row="1" x:Name="HistoryList" BorderThickness="0" Background="Transparent" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                 <ListView.View>
                     <GridView>
                         <GridViewColumn Header="Дата" DisplayMemberBinding="{Binding Date}" Width="145" />
@@ -16,9 +21,7 @@
                     </GridView>
                 </ListView.View>
             </ListView>
-            <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,14,0,0">
-                <Button Content="Очистить историю" Click="ClearHistoryButton_Click" Padding="14,8" />
-            </StackPanel>
-        </DockPanel>
+            <Button Grid.Row="2" Content="Очистить историю" Click="ClearHistoryButton_Click" Padding="14,8" MinWidth="145" HorizontalAlignment="Right" Margin="0,14,0,0" />
+        </Grid>
     </Border>
 </Window>
