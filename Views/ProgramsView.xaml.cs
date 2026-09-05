@@ -16,6 +16,9 @@ public partial class ProgramsView : UserControl
     private IReadOnlyList<InstalledProgram> _programs = [];
     private CancellationTokenSource? _loadCancellation;
     private bool _uninstallRunning;
+    private ProgramSortMode _sortMode = ProgramSortMode.LeastRecentlyUsed;
+    private SortDirection _sortDirection = SortDirection.Ascending;
+    private bool _sortWasSelected;
 
     public ProgramsView(AppDialogHost dialog)
     {
@@ -56,8 +59,8 @@ public partial class ProgramsView : UserControl
     private void ApplyFilters()
     {
         var now = DateTimeOffset.Now;
-        var filtered = InstalledProgramsService.Filter(_programs, SearchBox.Text, SelectedUnusedDays(), now);
-        var sorted = InstalledProgramsService.Sort(filtered, SelectedSortMode());
+        var filtered = InstalledProgramsService.Filter(_programs, SearchBox.Text, 0, now);
+        var sorted = InstalledProgramsService.Sort(filtered, _sortMode, _sortDirection);
         ProgramsList.ItemsSource = sorted.Select(program => new ProgramRow(
             program.Name,
             program.Publisher,
@@ -86,30 +89,41 @@ public partial class ProgramsView : UserControl
         return days == 0 ? "сегодня" : $"{days:N0} дн.";
     }
 
-    private ProgramSortMode SelectedSortMode() => SortBox.SelectedIndex switch
+    private void ProgramColumnHeader_Click(object sender, RoutedEventArgs e)
     {
-        1 => ProgramSortMode.MostRecentlyUsed,
-        2 => ProgramSortMode.LargestFirst,
-        3 => ProgramSortMode.NewestInstall,
-        4 => ProgramSortMode.Name,
-        _ => ProgramSortMode.LeastRecentlyUsed
-    };
-
-    private int SelectedUnusedDays() => UnusedBox.SelectedIndex switch
-    {
-        1 => 30,
-        2 => 90,
-        3 => 180,
-        4 => 365,
-        _ => 0
-    };
-
-    private void Filters_Changed(object sender, SelectionChangedEventArgs e)
-    {
-        if (IsLoaded)
+        if (sender is not GridViewColumnHeader header || header.Tag is not string tag ||
+            !Enum.TryParse<ProgramSortMode>(tag, out var mode))
         {
-            ApplyFilters();
+            return;
         }
+
+        if (_sortWasSelected && _sortMode == mode)
+        {
+            _sortDirection = _sortDirection == SortDirection.Ascending
+                ? SortDirection.Descending
+                : SortDirection.Ascending;
+        }
+        else
+        {
+            _sortMode = mode;
+            _sortDirection = SortDirection.Ascending;
+            _sortWasSelected = true;
+        }
+
+        UpdateSortIndicator(header);
+        ApplyFilters();
+    }
+
+    private void UpdateSortIndicator(GridViewColumnHeader activeHeader)
+    {
+        foreach (var header in new[] { NameHeader, PublisherHeader, SizeHeader, InstalledHeader, LastUsedHeader, IdleHeader, SourceHeader })
+        {
+            var text = header.Content?.ToString()?.TrimEnd(' ', '▲', '▼') ?? string.Empty;
+            header.Content = text;
+        }
+
+        var activeText = activeHeader.Content?.ToString()?.TrimEnd(' ', '▲', '▼') ?? string.Empty;
+        activeHeader.Content = $"{activeText} {(_sortDirection == SortDirection.Ascending ? '▲' : '▼')}";
     }
 
     private void SearchBox_TextChanged(object sender, TextChangedEventArgs e)
@@ -213,10 +227,44 @@ public partial class ProgramsView : UserControl
         var files = _residuals.Delete(outcome.ResidualFiles);
         var registry = _residuals.DeleteRegistryEntries(outcome.ResidualRegistryEntries);
         AppLogService.Write($"Остатки «{program.Name}»: файлов удалено={files.DeletedFiles}, пропущено={files.SkippedFiles}, байт={files.DeletedBytes}, записей реестра удалено={registry.DeletedEntries}, пропущено={registry.SkippedEntries}");
+        var reasons = FormatCleanupReasons(files.SkippedByReason, registry.SkippedByReason);
+        var advice = FormatCleanupAdvice(files.SkippedByReason, registry.SkippedByReason);
         await _dialog.ShowMessageAsync(
             "Очистка остатков",
-            $"Удалено файлов: {files.DeletedFiles:N0} ({ByteSizeFormatter.Format(files.DeletedBytes)}), пропущено: {files.SkippedFiles:N0}. Записей реестра удалено: {registry.DeletedEntries:N0}, пропущено: {registry.SkippedEntries:N0}.");
+            $"Удалено файлов: {files.DeletedFiles:N0} ({ByteSizeFormatter.Format(files.DeletedBytes)}), пропущено: {files.SkippedFiles:N0}. Записей реестра удалено: {registry.DeletedEntries:N0}, пропущено: {registry.SkippedEntries:N0}." + reasons + advice);
     }
+
+    private static string FormatCleanupReasons(IReadOnlyDictionary<CleanupSkipReason, int> fileReasons, IReadOnlyDictionary<CleanupSkipReason, int> registryReasons)
+    {
+        var all = fileReasons.Concat(registryReasons)
+            .GroupBy(item => item.Key)
+            .Select(group => (Reason: group.Key, Count: group.Sum(item => item.Value)))
+            .Where(item => item.Reason != CleanupSkipReason.None)
+            .OrderByDescending(item => item.Count)
+            .ToArray();
+        return all.Length == 0 ? string.Empty : $"\n\nПричины пропуска:\n{string.Join("\n", all.Select(item => $"• {CleanupReasonText(item.Reason)}: {item.Count:N0}"))}";
+    }
+
+    private static string FormatCleanupAdvice(IReadOnlyDictionary<CleanupSkipReason, int> fileReasons, IReadOnlyDictionary<CleanupSkipReason, int> registryReasons)
+    {
+        var reasons = fileReasons.Keys.Concat(registryReasons.Keys).ToHashSet();
+        var advice = new List<string>();
+        if (reasons.Contains(CleanupSkipReason.AccessDenied)) advice.Add("запустите Cleaner от имени администратора");
+        if (reasons.Contains(CleanupSkipReason.FileInUse)) advice.Add("закройте программу, использующую файлы, и повторите очистку");
+        if (reasons.Contains(CleanupSkipReason.NotFound) || reasons.Contains(CleanupSkipReason.Changed)) advice.Add("повторно обновите список остатков");
+        if (reasons.Contains(CleanupSkipReason.ReparsePoint)) advice.Add("ссылки и junction пропущены намеренно для защиты данных");
+        return advice.Count == 0 ? string.Empty : $"\n\nЧто сделать: {string.Join("; ", advice)}.";
+    }
+
+    private static string CleanupReasonText(CleanupSkipReason reason) => reason switch
+    {
+        CleanupSkipReason.AccessDenied => "нет прав доступа",
+        CleanupSkipReason.FileInUse => "файл занят другим процессом",
+        CleanupSkipReason.NotFound => "объект уже отсутствует",
+        CleanupSkipReason.ReparsePoint => "ссылка или junction",
+        CleanupSkipReason.Changed => "запись изменилась после проверки",
+        _ => "ошибка Windows"
+    };
 
     private async void RefreshButton_Click(object sender, RoutedEventArgs e) => await ReloadAsync();
 

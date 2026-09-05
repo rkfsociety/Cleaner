@@ -28,6 +28,12 @@ public enum ProgramSortMode
     Name
 }
 
+public enum SortDirection
+{
+    Ascending,
+    Descending
+}
+
 /// <summary>
 /// Читает установленные программы из реестра и оценивает давность их использования.
 /// Ничего не изменяет и не удаляет: выполняется только чтение реестра и метаданных файлов.
@@ -70,28 +76,34 @@ public sealed class InstalledProgramsService
     /// <summary>Сортировка списка; программы без данных о запуске всегда идут в конце.</summary>
     public static IReadOnlyList<InstalledProgram> Sort(IEnumerable<InstalledProgram> programs, ProgramSortMode mode)
     {
-        var items = programs.ToList();
         return mode switch
         {
-            ProgramSortMode.LeastRecentlyUsed => items
+            ProgramSortMode.MostRecentlyUsed => Sort(programs, ProgramSortMode.LeastRecentlyUsed, SortDirection.Descending),
+            ProgramSortMode.LargestFirst => Sort(programs, mode, SortDirection.Descending),
+            ProgramSortMode.NewestInstall => Sort(programs, mode, SortDirection.Descending),
+            _ => Sort(programs, mode, SortDirection.Ascending)
+        };
+    }
+
+    public static IReadOnlyList<InstalledProgram> Sort(IEnumerable<InstalledProgram> programs, ProgramSortMode mode, SortDirection direction)
+    {
+        var items = programs.ToList();
+        var descending = direction == SortDirection.Descending;
+        return mode switch
+        {
+            ProgramSortMode.LeastRecentlyUsed => (descending ? items
+                .OrderBy(program => program.LastUsedAt.HasValue ? 0 : 1)
+                .ThenByDescending(program => program.LastUsedAt ?? DateTimeOffset.MinValue) : items
                 .OrderBy(program => program.LastUsedAt.HasValue ? 0 : 1)
                 .ThenBy(program => program.LastUsedAt ?? DateTimeOffset.MaxValue)
+                ).ThenBy(program => program.Name, StringComparer.CurrentCultureIgnoreCase).ToArray(),
+            ProgramSortMode.LargestFirst => (descending ? items.OrderByDescending(program => program.EstimatedBytes) : items.OrderBy(program => program.EstimatedBytes))
                 .ThenBy(program => program.Name, StringComparer.CurrentCultureIgnoreCase)
                 .ToArray(),
-            ProgramSortMode.MostRecentlyUsed => items
-                .OrderBy(program => program.LastUsedAt.HasValue ? 0 : 1)
-                .ThenByDescending(program => program.LastUsedAt ?? DateTimeOffset.MinValue)
+            ProgramSortMode.NewestInstall => (descending ? items.OrderByDescending(program => program.InstalledAt.HasValue ? 0 : 1).ThenByDescending(program => program.InstalledAt ?? DateTimeOffset.MinValue) : items.OrderBy(program => program.InstalledAt.HasValue ? 0 : 1).ThenBy(program => program.InstalledAt ?? DateTimeOffset.MaxValue))
                 .ThenBy(program => program.Name, StringComparer.CurrentCultureIgnoreCase)
                 .ToArray(),
-            ProgramSortMode.LargestFirst => items
-                .OrderByDescending(program => program.EstimatedBytes)
-                .ThenBy(program => program.Name, StringComparer.CurrentCultureIgnoreCase)
-                .ToArray(),
-            ProgramSortMode.NewestInstall => items
-                .OrderByDescending(program => program.InstalledAt ?? DateTimeOffset.MinValue)
-                .ThenBy(program => program.Name, StringComparer.CurrentCultureIgnoreCase)
-                .ToArray(),
-            _ => items.OrderBy(program => program.Name, StringComparer.CurrentCultureIgnoreCase).ToArray()
+            _ => (descending ? items.OrderByDescending(program => program.Name, StringComparer.CurrentCultureIgnoreCase) : items.OrderBy(program => program.Name, StringComparer.CurrentCultureIgnoreCase)).ToArray()
         };
     }
 

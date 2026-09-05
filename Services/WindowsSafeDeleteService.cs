@@ -46,7 +46,7 @@ internal static class WindowsSafeDeleteService
         public uint FileIndexLow;
     }
 
-    public static bool TryDelete(string fullPath, string root)
+    public static DeleteAttemptResult TryDelete(string fullPath, string root)
     {
         var handles = new List<SafeFileHandle>();
         try
@@ -54,23 +54,36 @@ internal static class WindowsSafeDeleteService
             foreach (var directory in GetDirectoriesToLock(fullPath, root))
             {
                 var directoryHandle = CreateFile(directory, GenericRead, FileShare.Read | FileShare.Write, IntPtr.Zero, OpenExisting, FileFlagBackupSemantics | FileFlagOpenReparsePoint, IntPtr.Zero);
-                if (directoryHandle.IsInvalid || IsReparsePoint(directoryHandle))
+                if (directoryHandle.IsInvalid)
                 {
                     directoryHandle.Dispose();
-                    return false;
+                    return new DeleteAttemptResult(false, ClassifyWin32Error(Marshal.GetLastWin32Error()));
+                }
+
+                if (IsReparsePoint(directoryHandle))
+                {
+                    directoryHandle.Dispose();
+                    return new DeleteAttemptResult(false, CleanupSkipReason.ReparsePoint);
                 }
 
                 handles.Add(directoryHandle);
             }
 
             using var file = CreateFile(fullPath, Delete, FileShare.Read | FileShare.Write, IntPtr.Zero, OpenExisting, FileFlagOpenReparsePoint, IntPtr.Zero);
-            if (file.IsInvalid || IsReparsePoint(file))
+            if (file.IsInvalid)
             {
-                return false;
+                return new DeleteAttemptResult(false, ClassifyWin32Error(Marshal.GetLastWin32Error()));
+            }
+
+            if (IsReparsePoint(file))
+            {
+                return new DeleteAttemptResult(false, CleanupSkipReason.ReparsePoint);
             }
 
             var disposition = new FileDispositionInformation { DeleteFile = true };
-            return SetFileInformationByHandle(file, FileDispositionInfo, ref disposition, (uint)Marshal.SizeOf<FileDispositionInformation>());
+            return SetFileInformationByHandle(file, FileDispositionInfo, ref disposition, (uint)Marshal.SizeOf<FileDispositionInformation>())
+                ? new DeleteAttemptResult(true, CleanupSkipReason.None)
+                : new DeleteAttemptResult(false, ClassifyWin32Error(Marshal.GetLastWin32Error()));
         }
         finally
         {
@@ -104,4 +117,14 @@ internal static class WindowsSafeDeleteService
 
         return directories;
     }
+
+    private static CleanupSkipReason ClassifyWin32Error(int error) => error switch
+    {
+        2 or 3 => CleanupSkipReason.NotFound,
+        5 => CleanupSkipReason.AccessDenied,
+        32 or 33 => CleanupSkipReason.FileInUse,
+        _ => CleanupSkipReason.Unknown
+    };
 }
+
+internal sealed record DeleteAttemptResult(bool Succeeded, CleanupSkipReason Reason);

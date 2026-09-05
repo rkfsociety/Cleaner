@@ -39,10 +39,12 @@ public sealed class ResidualCleanupService
         var deleted = 0;
         var skipped = 0;
         long bytes = 0;
+        var skippedByReason = new Dictionary<CleanupSkipReason, int>();
 
         foreach (var file in files)
         {
-            if (WindowsSafeDeleteService.TryDelete(file.Path, file.Root))
+            var attempt = WindowsSafeDeleteService.TryDelete(file.Path, file.Root);
+            if (attempt.Succeeded)
             {
                 deleted++;
                 bytes += file.Size;
@@ -50,11 +52,12 @@ public sealed class ResidualCleanupService
             else
             {
                 skipped++;
+                skippedByReason[attempt.Reason] = skippedByReason.GetValueOrDefault(attempt.Reason) + 1;
             }
         }
 
         RemoveEmptyDirectories(files.Select(file => file.Path));
-        return new ResidualCleanupResult(deleted, skipped, bytes);
+        return new ResidualCleanupResult(deleted, skipped, bytes, skippedByReason);
     }
 
     public IReadOnlyList<ResidualRegistryEntry> FindRegistryEntries(InstalledProgram program)
@@ -97,6 +100,7 @@ public sealed class ResidualCleanupService
     {
         var deleted = 0;
         var skipped = 0;
+        var skippedByReason = new Dictionary<CleanupSkipReason, int>();
         foreach (var entry in entries)
         {
             try
@@ -107,6 +111,7 @@ public sealed class ResidualCleanupService
                 if (uninstall is null || string.IsNullOrWhiteSpace(name))
                 {
                     skipped++;
+                    skippedByReason[CleanupSkipReason.NotFound] = skippedByReason.GetValueOrDefault(CleanupSkipReason.NotFound) + 1;
                     continue;
                 }
 
@@ -115,18 +120,19 @@ public sealed class ResidualCleanupService
                 if (!string.Equals(displayName?.Trim(), entry.DisplayName, StringComparison.OrdinalIgnoreCase))
                 {
                     skipped++;
+                    skippedByReason[CleanupSkipReason.Changed] = skippedByReason.GetValueOrDefault(CleanupSkipReason.Changed) + 1;
                     continue;
                 }
 
                 uninstall.DeleteSubKeyTree(name, throwOnMissingSubKey: false);
                 deleted++;
             }
-            catch (SecurityException) { skipped++; }
-            catch (UnauthorizedAccessException) { skipped++; }
-            catch (IOException) { skipped++; }
+            catch (SecurityException) { skipped++; skippedByReason[CleanupSkipReason.AccessDenied] = skippedByReason.GetValueOrDefault(CleanupSkipReason.AccessDenied) + 1; }
+            catch (UnauthorizedAccessException) { skipped++; skippedByReason[CleanupSkipReason.AccessDenied] = skippedByReason.GetValueOrDefault(CleanupSkipReason.AccessDenied) + 1; }
+            catch (IOException) { skipped++; skippedByReason[CleanupSkipReason.Unknown] = skippedByReason.GetValueOrDefault(CleanupSkipReason.Unknown) + 1; }
         }
 
-        return new ResidualRegistryCleanupResult(deleted, skipped);
+        return new ResidualRegistryCleanupResult(deleted, skipped, skippedByReason);
     }
 
     internal static IReadOnlyList<string> GetRoots(InstalledProgram program)
@@ -307,5 +313,16 @@ public sealed class ResidualCleanupService
     }
 }
 
-public sealed record ResidualCleanupResult(int DeletedFiles, int SkippedFiles, long DeletedBytes);
-public sealed record ResidualRegistryCleanupResult(int DeletedEntries, int SkippedEntries);
+public enum CleanupSkipReason
+{
+    None,
+    AccessDenied,
+    FileInUse,
+    NotFound,
+    ReparsePoint,
+    Changed,
+    Unknown
+}
+
+public sealed record ResidualCleanupResult(int DeletedFiles, int SkippedFiles, long DeletedBytes, IReadOnlyDictionary<CleanupSkipReason, int> SkippedByReason);
+public sealed record ResidualRegistryCleanupResult(int DeletedEntries, int SkippedEntries, IReadOnlyDictionary<CleanupSkipReason, int> SkippedByReason);

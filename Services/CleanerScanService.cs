@@ -272,7 +272,7 @@ public sealed class CleanerScanService
                 }
 
                 var deletionRoot = fullRoots.First(root => fullPath.StartsWith(root, StringComparison.OrdinalIgnoreCase));
-                if (!WindowsSafeDeleteService.TryDelete(fullPath, deletionRoot))
+                if (!WindowsSafeDeleteService.TryDelete(fullPath, deletionRoot).Succeeded)
                 {
                     skipped++;
                     continue;

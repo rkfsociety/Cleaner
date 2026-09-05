@@ -151,6 +151,28 @@ public class InstalledProgramsServiceTests
     }
 
     [Fact]
+    public void Sort_BySize_TogglesAscendingAndDescending()
+    {
+        var programs = new[]
+        {
+            Program("Маленькая", null, 1024),
+            Program("Большая", null, 5 * 1024 * 1024)
+        };
+
+        Assert.Equal(["Маленькая", "Большая"], InstalledProgramsService.Sort(programs, ProgramSortMode.LargestFirst, SortDirection.Ascending).Select(program => program.Name));
+        Assert.Equal(["Большая", "Маленькая"], InstalledProgramsService.Sort(programs, ProgramSortMode.LargestFirst, SortDirection.Descending).Select(program => program.Name));
+    }
+
+    [Fact]
+    public void Sort_ByName_TogglesAscendingAndDescending()
+    {
+        var programs = new[] { Program("Бета", null), Program("Альфа", null) };
+
+        Assert.Equal(["Альфа", "Бета"], InstalledProgramsService.Sort(programs, ProgramSortMode.Name, SortDirection.Ascending).Select(program => program.Name));
+        Assert.Equal(["Бета", "Альфа"], InstalledProgramsService.Sort(programs, ProgramSortMode.Name, SortDirection.Descending).Select(program => program.Name));
+    }
+
+    [Fact]
     public void Filter_ByUnusedDays_KeepsIdleAndUnknownPrograms()
     {
         var now = new DateTimeOffset(2026, 8, 23, 12, 0, 0, TimeSpan.Zero);

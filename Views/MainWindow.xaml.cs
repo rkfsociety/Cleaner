@@ -52,12 +52,8 @@ public partial class MainWindow : Window
         ShowHome();
         if (App.IsSystemCleanupSession)
         {
-            UserTempCheckBox.IsChecked = false;
-            UserTempCheckBox.IsEnabled = false;
-            RecycleBinCheckBox.IsChecked = false;
-            RecycleBinCheckBox.IsEnabled = false;
-            StatusText.Text = "Системная очистка";
-            StatusDetails.Text = "Открыта повышенная сессия только для системного Temp";
+            StatusText.Text = "Повышенная очистка";
+            StatusDetails.Text = "Приложение запущено с правами администратора — доступны все категории";
         }
     }
 
@@ -216,7 +212,7 @@ public partial class MainWindow : Window
         {
             var elevation = await Dialog.ConfirmAsync(
                 "Нужны права администратора",
-                "Для системного Temp нужна отдельная повышенная сессия. Cleaner перезапустится в режиме только системной очистки; после запуска повторите проверку.",
+                "Для системного Temp нужна отдельная повышенная сессия. Cleaner перезапустится с правами администратора; после запуска повторите проверку и выберите нужные категории.",
                 "Перезапустить");
             if (elevation && !App.RestartForSystemCleanup())
             {
