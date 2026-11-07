@@ -32,12 +32,12 @@
 
                 <!-- Window Brand -->
                 <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="14,0,0,0">
-                    <Border Width="24" Height="24" CornerRadius="7" Background="{StaticResource Purple}">
+                    <Border Width="26" Height="26" CornerRadius="8" Background="{StaticResource PrimaryGradient}">
                         <TextBlock Text="✦" Foreground="White" FontSize="13" HorizontalAlignment="Center" VerticalAlignment="Center" />
                     </Border>
-                    <TextBlock Text="Cleaner" Foreground="{StaticResource Ink}" FontSize="13.5" FontWeight="SemiBold" VerticalAlignment="Center" Margin="9,0,0,0" />
+                    <TextBlock Text="Cleaner" Foreground="{StaticResource Ink}" FontSize="14.5" FontWeight="Bold" VerticalAlignment="Center" Margin="9,0,0,0" />
                     <Border Background="#1C2436" CornerRadius="5" Padding="6,2" VerticalAlignment="Center" Margin="8,0,0,0">
-                        <TextBlock x:Name="TitleVersionText" Text="v0.0.18" Foreground="{StaticResource Muted}" FontSize="10" FontWeight="Medium" />
+                        <TextBlock x:Name="TitleVersionText" Text="v0.0.19" Foreground="{StaticResource Muted}" FontSize="10" FontWeight="Medium" />
                     </Border>
                 </StackPanel>
 
@@ -75,52 +75,62 @@
                         </Grid.RowDefinitions>
 
                         <StackPanel Grid.Row="0">
-                            <TextBlock Text="ОБЗОР" Foreground="{StaticResource Muted}" FontSize="11" FontWeight="SemiBold" Margin="12,6,0,8" />
+                            <TextBlock Text="ОБЗОР" Foreground="#5A667E" FontSize="10.5" FontWeight="SemiBold" Margin="12,6,0,8" />
                             <Button x:Name="HomeNavButton" Style="{StaticResource NavButton}" Click="HomeNavigation_Click">
                                 <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="⌂" FontSize="17" Width="26" VerticalAlignment="Center" />
+                                    <Path Data="M 1,7.5 L 8,1.5 L 15,7.5 L 15,14.5 L 10,14.5 L 10,10 L 6,10 L 6,14.5 L 1,14.5 Z"
+                                          Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                          StrokeThickness="1.4" StrokeLineJoin="Round" Fill="Transparent" Width="16" Height="16" VerticalAlignment="Center" Margin="0,0,11,0" />
                                     <TextBlock Text="Главная" VerticalAlignment="Center" />
                                 </StackPanel>
                             </Button>
                             <Button x:Name="ProgramsNavButton" Style="{StaticResource NavButton}" Click="ProgramsNavigation_Click">
                                 <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="▤" FontSize="15" Width="26" VerticalAlignment="Center" />
+                                    <Path Data="M 1,1 H 6 V 6 H 1 Z M 9,1 H 14 V 6 H 9 Z M 1,9 H 6 V 14 H 1 Z M 9,9 H 14 V 14 H 9 Z"
+                                          Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                          StrokeThickness="1.4" StrokeLineJoin="Round" Fill="Transparent" Width="15" Height="15" VerticalAlignment="Center" Margin="0,0,12,0" />
                                     <TextBlock Text="Программы" VerticalAlignment="Center" />
                                 </StackPanel>
                             </Button>
                             <Button x:Name="HistoryNavButton" Style="{StaticResource NavButton}" Click="HistoryNavigation_Click">
                                 <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="✓" FontSize="15" Width="26" VerticalAlignment="Center" />
+                                    <Path Data="M 8,1 A 7,7 0 1 1 1,8 A 7,7 0 0 1 8,1 M 8,4.5 V 8 L 11,10.5"
+                                          Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                          StrokeThickness="1.4" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Fill="Transparent" Width="16" Height="16" VerticalAlignment="Center" Margin="0,0,11,0" />
                                     <TextBlock Text="История" VerticalAlignment="Center" />
                                 </StackPanel>
                             </Button>
 
-                            <TextBlock Text="ПРИЛОЖЕНИЕ" Foreground="{StaticResource Muted}" FontSize="11" FontWeight="SemiBold" Margin="12,22,0,8" />
+                            <TextBlock Text="ПРИЛОЖЕНИЕ" Foreground="#5A667E" FontSize="10.5" FontWeight="SemiBold" Margin="12,20,0,8" />
                             <Button x:Name="SettingsNavButton" Style="{StaticResource NavButton}" Click="SettingsNavigation_Click">
                                 <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="⚙" FontSize="15" Width="26" VerticalAlignment="Center" />
+                                    <Path Data="M 8,5.5 A 2.5,2.5 0 1 1 8,10.5 A 2.5,2.5 0 0 1 8,5.5 M 8,1.5 L 9.2,3.1 L 11.2,2.8 L 11.8,4.8 L 13.8,5.5 L 13.2,7.5 L 14.5,8.9 L 13.2,10.3 L 13.8,12.3 L 11.8,13 L 11.2,15 L 9.2,14.7 L 8,16.3 L 6.8,14.7 L 4.8,15 L 4.2,13 L 2.2,12.3 L 2.8,10.3 L 1.5,8.9 L 2.8,7.5 L 2.2,5.5 L 4.2,4.8 L 4.8,2.8 L 6.8,3.1 Z"
+                                          Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                          StrokeThickness="1.3" StrokeLineJoin="Round" Fill="Transparent" Width="16" Height="16" VerticalAlignment="Center" Margin="0,0,11,0" />
                                     <TextBlock Text="Настройки" VerticalAlignment="Center" />
                                 </StackPanel>
                             </Button>
                             <Button x:Name="HelpNavButton" Style="{StaticResource NavButton}" Click="HelpNavigation_Click">
                                 <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="?" FontSize="15" Width="26" VerticalAlignment="Center" />
+                                    <Path Data="M 8,1 A 7,7 0 1 1 1,8 A 7,7 0 0 1 8,1 M 6.2,5.8 A 1.8,1.8 0 0 1 9.6,6.6 C 9.6,8 8,8.2 8,9.8 M 8,12 V 12.5"
+                                          Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                          StrokeThickness="1.4" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Fill="Transparent" Width="16" Height="16" VerticalAlignment="Center" Margin="0,0,11,0" />
                                     <TextBlock Text="Помощь" VerticalAlignment="Center" />
                                 </StackPanel>
                             </Button>
                         </StackPanel>
 
                         <!-- Bottom Storage Card -->
-                        <Border Grid.Row="2" Background="#161C2B" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="14" Padding="14,13" VerticalAlignment="Bottom">
+                        <Border Grid.Row="2" Background="{StaticResource CardBackground}" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="12" Padding="14,12" VerticalAlignment="Bottom">
                             <StackPanel>
                                 <Grid>
                                     <TextBlock Text="Ваш компьютер" Foreground="{StaticResource Ink}" FontSize="12.5" FontWeight="SemiBold" VerticalAlignment="Center" />
-                                    <Border Background="#1C382E" CornerRadius="5" Padding="6,2" HorizontalAlignment="Right">
-                                        <TextBlock Text="Активен" Foreground="#45B79C" FontSize="10" FontWeight="SemiBold" />
+                                    <Border Background="#163326" CornerRadius="5" Padding="6,2" HorizontalAlignment="Right">
+                                        <TextBlock Text="Активен" Foreground="#34D399" FontSize="10" FontWeight="SemiBold" />
                                     </Border>
                                 </Grid>
-                                <TextBlock x:Name="SidebarDriveSubtext" Text="Защищён и готов к очистке" Foreground="{StaticResource Muted}" FontSize="11.5" Margin="0,5,0,0" TextTrimming="CharacterEllipsis" />
-                                <ProgressBar x:Name="FreeSpaceProgress" Value="0" Height="5" Margin="0,11,0,0" Foreground="{StaticResource Purple}" />
+                                <TextBlock x:Name="SidebarDriveSubtext" Text="Защищён и готов к очистке" Foreground="{StaticResource Muted}" FontSize="11" Margin="0,5,0,0" TextTrimming="CharacterEllipsis" />
+                                <ProgressBar x:Name="FreeSpaceProgress" Value="0" Height="4" Margin="0,10,0,0" Foreground="{StaticResource Purple}" />
                             </StackPanel>
                         </Border>
                     </Grid>
@@ -139,11 +149,11 @@
                         <!-- Greeting Header -->
                         <Grid Grid.Row="0" Margin="0,0,0,16">
                             <StackPanel VerticalAlignment="Center">
-                                <TextBlock x:Name="WelcomeText" Foreground="{StaticResource Ink}" FontSize="25" FontWeight="SemiBold" />
-                                <TextBlock Text="Проверим состояние системы и безопасно освободим свободное место" Foreground="{StaticResource Muted}" FontSize="13" Margin="0,4,0,0" />
+                                <TextBlock x:Name="WelcomeText" Foreground="{StaticResource Ink}" FontSize="24" FontWeight="Bold" />
+                                <TextBlock Text="Проверим, всё ли в порядке с вашим компьютером" Foreground="{StaticResource Muted}" FontSize="12.5" Margin="0,4,0,0" />
                             </StackPanel>
-                            <Border HorizontalAlignment="Right" VerticalAlignment="Center" Width="38" Height="38" CornerRadius="19" Background="{StaticResource PurpleLight}" BorderBrush="#35315E" BorderThickness="1">
-                                <TextBlock x:Name="UserInitialText" Foreground="{StaticResource Purple}" FontSize="15" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            <Border HorizontalAlignment="Right" VerticalAlignment="Center" Width="38" Height="38" CornerRadius="19" Background="{StaticResource PurpleLight}" BorderBrush="#3B346E" BorderThickness="1">
+                                <TextBlock x:Name="UserInitialText" Foreground="{StaticResource Purple}" FontSize="15" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" />
                             </Border>
                         </Grid>
 
@@ -156,17 +166,17 @@
                                 </Grid.ColumnDefinitions>
 
                                 <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
-                                    <TextBlock Text="СОСТОЯНИЕ СИСТЕМЫ" Foreground="{StaticResource Muted}" FontSize="11" FontWeight="SemiBold" />
-                                    <TextBlock x:Name="StatusText" Text="Всё чисто" Foreground="{StaticResource Ink}" FontSize="25" FontWeight="SemiBold" Margin="0,4,0,0" />
-                                    <TextBlock x:Name="StatusDetails" Text="Проверка ещё не выполнялась" Foreground="{StaticResource Muted}" FontSize="12.5" Margin="0,5,0,0" TextWrapping="Wrap" />
+                                    <TextBlock Text="СОСТОЯНИЕ СИСТЕМЫ" Foreground="{StaticResource Muted}" FontSize="10.5" FontWeight="SemiBold" />
+                                    <TextBlock x:Name="StatusText" Text="Всё чисто" Foreground="{StaticResource Ink}" FontSize="24" FontWeight="Bold" Margin="0,4,0,0" />
+                                    <TextBlock x:Name="StatusDetails" Text="Подсчитываем занятое место по выбранным дискам..." Foreground="{StaticResource Muted}" FontSize="12.5" Margin="0,5,0,0" TextWrapping="Wrap" />
                                     <ProgressBar x:Name="ScanProgressBar" Height="4" Width="280" HorizontalAlignment="Left" Margin="0,10,0,0" IsIndeterminate="True" Visibility="Collapsed" />
-                                    <StackPanel Orientation="Horizontal" Margin="0,15,0,0">
+                                    <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
                                         <Button x:Name="ScanButton" Content="Начать проверку" Click="ScanButton_Click" Style="{StaticResource PrimaryButton}" />
                                         <Button x:Name="DriveButton" Content="Диски..." Click="DriveButton_Click" Style="{StaticResource SecondaryButton}" Margin="10,0,0,0" />
                                     </StackPanel>
                                 </StackPanel>
 
-                                <Border Grid.Column="1" Background="#111622" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="14" Padding="14,12">
+                                <Border Grid.Column="1" Background="{StaticResource InnerCardBackground}" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="14" Padding="16,14">
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="145" />
@@ -174,10 +184,10 @@
                                         </Grid.ColumnDefinitions>
                                         <Grid Grid.Column="0" Width="145" Height="145" VerticalAlignment="Center">
                                             <Canvas x:Name="DiskUsageRing" Width="145" Height="145">
-                                                <Ellipse Width="145" Height="145" Stroke="{StaticResource Line}" StrokeThickness="12" />
+                                                <Ellipse Width="145" Height="145" Stroke="{StaticResource Line}" StrokeThickness="13" />
                                             </Canvas>
                                             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                                                <TextBlock x:Name="FreeSpaceText" Text="—" Foreground="{StaticResource Ink}" FontSize="25" FontWeight="SemiBold" HorizontalAlignment="Center" />
+                                                <TextBlock x:Name="FreeSpaceText" Text="—" Foreground="{StaticResource Ink}" FontSize="24" FontWeight="Bold" HorizontalAlignment="Center" />
                                                 <TextBlock Text="свободно" Foreground="{StaticResource Muted}" FontSize="11" HorizontalAlignment="Center" />
                                             </StackPanel>
                                         </Grid>
@@ -199,20 +209,20 @@
                                 <StackPanel>
                                     <Grid>
                                         <TextBlock Text="Temp и кэш пользователя" Foreground="{StaticResource Muted}" FontSize="12.5" VerticalAlignment="Center" />
-                                        <Border Width="8" Height="8" CornerRadius="4" Background="#45B79C" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                                        <Border Width="8" Height="8" CornerRadius="4" Background="#38B2AC" HorizontalAlignment="Right" VerticalAlignment="Center" />
                                     </Grid>
-                                    <TextBlock x:Name="UserTempValue" Text="—" Foreground="{StaticResource Ink}" FontSize="23" FontWeight="SemiBold" Margin="0,9,0,0" />
-                                    <TextBlock x:Name="UserTempSubtitle" Text="Ожидает проверки" Foreground="#45B79C" FontSize="11.5" Margin="0,5,0,0" />
+                                    <TextBlock x:Name="UserTempValue" Text="—" Foreground="{StaticResource Ink}" FontSize="23" FontWeight="Bold" Margin="0,9,0,0" />
+                                    <TextBlock x:Name="UserTempSubtitle" Text="Ожидает проверки" Foreground="#38B2AC" FontSize="11.5" Margin="0,5,0,0" />
                                 </StackPanel>
                             </Border>
 
                             <Border Grid.Column="1" Style="{StaticResource Card}" Padding="18,15" Margin="7,0">
                                 <StackPanel>
                                     <Grid>
-                                        <TextBlock Text="Системный Temp и обновления" Foreground="{StaticResource Muted}" FontSize="12.5" VerticalAlignment="Center" />
+                                        <TextBlock Text="Системный Temp" Foreground="{StaticResource Muted}" FontSize="12.5" VerticalAlignment="Center" />
                                         <Border Width="8" Height="8" CornerRadius="4" Background="#8576FF" HorizontalAlignment="Right" VerticalAlignment="Center" />
                                     </Grid>
-                                    <TextBlock x:Name="WindowsTempValue" Text="—" Foreground="{StaticResource Ink}" FontSize="23" FontWeight="SemiBold" Margin="0,9,0,0" />
+                                    <TextBlock x:Name="WindowsTempValue" Text="—" Foreground="{StaticResource Ink}" FontSize="23" FontWeight="Bold" Margin="0,9,0,0" />
                                     <TextBlock x:Name="WindowsTempSubtitle" Text="Ожидает проверки" Foreground="#8576FF" FontSize="11.5" Margin="0,5,0,0" />
                                 </StackPanel>
                             </Border>
@@ -223,7 +233,7 @@
                                         <TextBlock Text="Корзина" Foreground="{StaticResource Muted}" FontSize="12.5" VerticalAlignment="Center" />
                                         <Border Width="8" Height="8" CornerRadius="4" Background="#EF8E5B" HorizontalAlignment="Right" VerticalAlignment="Center" />
                                     </Grid>
-                                    <TextBlock x:Name="RecycleBinValue" Text="—" Foreground="{StaticResource Ink}" FontSize="23" FontWeight="SemiBold" Margin="0,9,0,0" />
+                                    <TextBlock x:Name="RecycleBinValue" Text="—" Foreground="{StaticResource Ink}" FontSize="23" FontWeight="Bold" Margin="0,9,0,0" />
                                     <TextBlock x:Name="RecycleBinSubtitle" Text="Ожидает проверки" Foreground="{StaticResource Muted}" FontSize="11.5" Margin="0,5,0,0" />
                                 </StackPanel>
                             </Border>
@@ -248,9 +258,9 @@
                                         <TextBlock Text="Выберите категории для следующей очистки" Foreground="{StaticResource Muted}" FontSize="12.5" Margin="0,3,0,12" />
                                     </StackPanel>
                                     <StackPanel Grid.Row="1" VerticalAlignment="Center">
-                                        <CheckBox x:Name="UserTempCheckBox" Content="Временные файлы, дампы и кэши браузеров" IsChecked="True" Margin="0,4" />
-                                        <CheckBox x:Name="WindowsTempCheckBox" Content="Системные временные файлы и кэш обновлений" IsChecked="False" Margin="0,4" />
-                                        <CheckBox x:Name="RecycleBinCheckBox" Content="Содержимое корзины выбранных дисков" IsChecked="False" Margin="0,4" />
+                                        <CheckBox x:Name="UserTempCheckBox" Content="Временные файлы пользователя" IsChecked="True" Margin="0,4" />
+                                        <CheckBox x:Name="WindowsTempCheckBox" Content="Системные временные файлы" IsChecked="False" Margin="0,4" />
+                                        <CheckBox x:Name="RecycleBinCheckBox" Content="Содержимое корзины" IsChecked="False" Margin="0,4" />
                                     </StackPanel>
                                     <Button Grid.Row="2" x:Name="CleanButton" Content="Очистить выбранное" Click="CleanButton_Click" Style="{StaticResource PrimaryButton}" HorizontalAlignment="Left" Margin="0,12,0,0" IsEnabled="False" />
                                 </Grid>
@@ -268,7 +278,7 @@
                                         <TextBlock x:Name="ActivityText" Text="Проверка ещё не выполнялась" Foreground="{StaticResource Muted}" FontSize="12.5" Margin="0,3,0,10" />
                                     </StackPanel>
                                     <StackPanel Grid.Row="1" VerticalAlignment="Center">
-                                        <TextBlock x:Name="ActivityResultText" Text="Запустите сканирование" Foreground="#45B79C" FontSize="13.5" FontWeight="SemiBold" Margin="0,0,0,6" />
+                                        <TextBlock x:Name="ActivityResultText" Text="Запустите сканирование" Foreground="#34D399" FontSize="13.5" FontWeight="SemiBold" Margin="0,0,0,6" />
                                         <TextBlock x:Name="ActivitySizeText" Text="Данные не удаляются без подтверждения" Foreground="{StaticResource Muted}" FontSize="12.5" TextWrapping="Wrap" />
                                     </StackPanel>
                                     <Button Grid.Row="2" x:Name="DetailsButton" Content="Показать детали" Click="DetailsButton_Click" Style="{StaticResource SecondaryButton}" HorizontalAlignment="Left" Margin="0,12,0,0" IsEnabled="False" />

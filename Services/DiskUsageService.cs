@@ -20,10 +20,10 @@ public sealed class DiskUsageService
     private readonly string _cachePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Cleaner", "disk-usage-cache.json");
     private static readonly (string Name, string[] RelativePaths, string Color)[] KnownCategories =
     [
-        ("Windows", ["Windows"], "#6C5CE7"),
+        ("Windows", ["Windows"], "#5B8DEF"),
         ("Программы", ["Program Files", "Program Files (x86)"], "#EF8E5B"),
-        ("Пользователи", ["Users"], "#45B79C"),
-        ("Данные программ", ["ProgramData"], "#4B8BCB")
+        ("Пользователи", ["Users"], "#38B2AC"),
+        ("Данные программ", ["ProgramData"], "#8576FF")
     ];
 
     public Task<DiskUsageSnapshot?> ReadAsync(IEnumerable<string> driveRoots, CancellationToken cancellationToken = default)
@@ -95,8 +95,8 @@ public sealed class DiskUsageService
             .Select(category => new DiskUsageSegment(category.Name, categoryBytes[category.Name], category.Color))
             .ToList();
         var knownTotal = segments.Sum(segment => segment.Bytes);
-        segments.Add(new DiskUsageSegment("Прочее", Math.Max(0, totalBytes - totalFreeBytes - knownTotal), "#A9B0C2"));
-        segments.Add(new DiskUsageSegment("Свободно", totalFreeBytes, "#B8B1F6"));
+        segments.Add(new DiskUsageSegment("Прочее", Math.Max(0, totalBytes - totalFreeBytes - knownTotal), "#64748B"));
+        segments.Add(new DiskUsageSegment("Свободно", totalFreeBytes, "#34D399"));
         return new DiskUsageSnapshot(totalBytes, segments, skippedDrives, driveSummaries);
     }
 

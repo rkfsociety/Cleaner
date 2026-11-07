@@ -4,16 +4,26 @@
              xmlns:local="clr-namespace:Cleaner"
              StartupUri="Views/MainWindow.xaml">
     <Application.Resources>
-        <SolidColorBrush x:Key="WindowBackground" Color="#0C0F17" />
-        <SolidColorBrush x:Key="PanelBackground" Color="#111622" />
-        <SolidColorBrush x:Key="CardBackground" Color="#161D2B" />
-        <SolidColorBrush x:Key="InputBackground" Color="#1C2436" />
+        <SolidColorBrush x:Key="WindowBackground" Color="#0A0D14" />
+        <SolidColorBrush x:Key="PanelBackground" Color="#0F131D" />
+        <SolidColorBrush x:Key="CardBackground" Color="#121725" />
+        <SolidColorBrush x:Key="InnerCardBackground" Color="#0E121E" />
+        <SolidColorBrush x:Key="InputBackground" Color="#161D2B" />
         <SolidColorBrush x:Key="Ink" Color="#F4F6FB" />
         <SolidColorBrush x:Key="Muted" Color="#8E9BB0" />
         <SolidColorBrush x:Key="Purple" Color="#8576FF" />
-        <SolidColorBrush x:Key="PurpleLight" Color="#262347" />
-        <SolidColorBrush x:Key="Line" Color="#232C3E" />
-        <SolidColorBrush x:Key="LineHighlight" Color="#35425C" />
+        <SolidColorBrush x:Key="PurpleLight" Color="#201E3D" />
+        <SolidColorBrush x:Key="Line" Color="#1E273A" />
+        <SolidColorBrush x:Key="LineHighlight" Color="#2C3A54" />
+
+        <LinearGradientBrush x:Key="PrimaryGradient" StartPoint="0,0" EndPoint="1,1">
+            <GradientStop Color="#8576FF" Offset="0" />
+            <GradientStop Color="#6452E8" Offset="1" />
+        </LinearGradientBrush>
+        <LinearGradientBrush x:Key="PrimaryHoverGradient" StartPoint="0,0" EndPoint="1,1">
+            <GradientStop Color="#9688FF" Offset="0" />
+            <GradientStop Color="#7564F5" Offset="1" />
+        </LinearGradientBrush>
 
         <Style x:Key="CaptionButton" TargetType="Button">
             <Setter Property="Background" Value="Transparent" />
@@ -105,7 +115,7 @@
         </Style>
 
         <Style x:Key="PrimaryButton" TargetType="Button">
-            <Setter Property="Background" Value="{StaticResource Purple}" />
+            <Setter Property="Background" Value="{StaticResource PrimaryGradient}" />
             <Setter Property="Foreground" Value="#FFFFFF" />
             <Setter Property="FontSize" Value="13.5" />
             <Setter Property="FontWeight" Value="SemiBold" />
@@ -123,22 +133,22 @@
             </Setter>
             <Style.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Background" Value="#7362FA" />
+                    <Setter Property="Background" Value="{StaticResource PrimaryHoverGradient}" />
                 </Trigger>
                 <Trigger Property="IsEnabled" Value="False">
-                    <Setter Property="Background" Value="#252D3E" />
-                    <Setter Property="Foreground" Value="#64728C" />
+                    <Setter Property="Background" Value="#222938" />
+                    <Setter Property="Foreground" Value="#55647D" />
                 </Trigger>
             </Style.Triggers>
         </Style>
 
         <Style x:Key="SecondaryButton" TargetType="Button">
-            <Setter Property="Background" Value="#1F2738" />
+            <Setter Property="Background" Value="#171F2D" />
             <Setter Property="Foreground" Value="{StaticResource Ink}" />
             <Setter Property="FontSize" Value="13" />
             <Setter Property="FontWeight" Value="Medium" />
             <Setter Property="Padding" Value="15,8" />
-            <Setter Property="BorderBrush" Value="#2D384D" />
+            <Setter Property="BorderBrush" Value="#253246" />
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="Cursor" Value="Hand" />
             <Setter Property="Template">
@@ -152,8 +162,8 @@
             </Setter>
             <Style.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Background" Value="#2A344A" />
-                    <Setter Property="BorderBrush" Value="#3F4D69" />
+                    <Setter Property="Background" Value="#202A3C" />
+                    <Setter Property="BorderBrush" Value="#354663" />
                 </Trigger>
                 <Trigger Property="IsEnabled" Value="False">
                     <Setter Property="Opacity" Value="0.45" />
