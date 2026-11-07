@@ -31,11 +31,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-        if (DiskLegendPanel.Parent is Grid legendGrid && legendGrid.Parent is Grid cardGrid && cardGrid.ColumnDefinitions.Count > 1)
-        {
-            cardGrid.ColumnDefinitions[1].Width = new GridLength(390);
-            DiskLegendPanel.Width = 215;
-        }
+        SidebarVersionText.Text = $"Версия {CleanerVersion.Current}";
 
         var userName = Environment.UserName.Trim();
         if (string.IsNullOrEmpty(userName))
@@ -457,7 +453,7 @@ public partial class MainWindow : Window
             var snapshot = await _diskUsageService.ReadAsync(_selectedDriveRoots, _diskUsageCancellation.Token);
             if (snapshot is not null && !_diskUsageCancellation.IsCancellationRequested)
             {
-                RenderDiskUsage(snapshot);
+                RenderDiskUsage(snapshot, updateStatusText: true);
             }
         }
         catch (OperationCanceledException)
@@ -467,24 +463,26 @@ public partial class MainWindow : Window
 
     private void ShowDiskUsageLoading()
     {
-        StatusDetails.Text = "Подсчитываем занятое место по выбранным дискам...";
+        if (_lastScan is null && _scanCancellation is null && _cleanupCancellation is null)
+        {
+            StatusDetails.Text = "Оцениваем занятое место по выбранным дискам...";
+        }
+
         DiskLegendPanel.Children.Clear();
         DiskLegendPanel.Children.Add(new TextBlock
         {
             Text = "Подробная легенда формируется...",
             Foreground = (Brush)FindResource("Ink"),
-            FontSize = 11,
+            FontSize = 11.5,
             FontWeight = FontWeights.SemiBold,
-            TextWrapping = TextWrapping.Wrap,
-            Width = 205
+            TextWrapping = TextWrapping.Wrap
         });
         DiskLegendPanel.Children.Add(new TextBlock
         {
             Text = $"Выбрано дисков: {_selectedDriveRoots.Count}\nЧитаем каталоги Windows, программ и пользователей",
             Foreground = (Brush)FindResource("Muted"),
-            FontSize = 10,
+            FontSize = 10.5,
             TextWrapping = TextWrapping.Wrap,
-            Width = 205,
             Margin = new Thickness(0, 4, 0, 0)
         });
 
@@ -503,19 +501,24 @@ public partial class MainWindow : Window
         ((RotateTransform)_diskUsageLoadingPath.RenderTransform).BeginAnimation(RotateTransform.AngleProperty, animation);
     }
 
-    private void RenderDiskUsage(DiskUsageSnapshot snapshot)
+    private void RenderDiskUsage(DiskUsageSnapshot snapshot, bool updateStatusText = false)
     {
         var free = snapshot.Segments.FirstOrDefault(segment => segment.Name == "Свободно")?.Bytes ?? 0;
         var percent = snapshot.TotalBytes <= 0 ? 0 : Math.Clamp(free * 100d / snapshot.TotalBytes, 0d, 100d);
         FreeSpaceText.Text = $"{percent:0.#}%";
         FreeSpaceProgress.Value = percent;
-        if (snapshot.SkippedDrives > 0)
+        SidebarDriveSubtext.Text = $"Свободно {ByteSizeFormatter.Format(free)} из {ByteSizeFormatter.Format(snapshot.TotalBytes)}";
+
+        if (updateStatusText && _lastScan is null && _scanCancellation is null && _cleanupCancellation is null)
         {
-            StatusDetails.Text = $"Доступные данные по дискам · не удалось прочитать: {snapshot.SkippedDrives}";
-        }
-        else if (snapshot.FromCache)
-        {
-            StatusDetails.Text = "Данные использования диска взяты из кэша · пересчёт не потребовался";
+            if (snapshot.SkippedDrives > 0)
+            {
+                StatusDetails.Text = $"Доступные данные по дискам · не удалось прочитать: {snapshot.SkippedDrives}";
+            }
+            else
+            {
+                StatusDetails.Text = "Готов к проверке временных файлов, кэшей и корзины";
+            }
         }
 
         DiskUsageRing.Children.Clear();
@@ -541,27 +544,52 @@ public partial class MainWindow : Window
         foreach (var segment in snapshot.Segments.Where(segment => segment.Bytes > 0))
         {
             var share = segment.Bytes * 100d / snapshot.TotalBytes;
-            var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 2, 0, 2) };
-            row.Children.Add(new Border { Width = 8, Height = 8, CornerRadius = new CornerRadius(4), Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString(segment.Color)), Margin = new Thickness(0, 0, 6, 0), VerticalAlignment = VerticalAlignment.Center });
-            row.Children.Add(new TextBlock { Text = $"{segment.Name}: {ByteSizeFormatter.Format(segment.Bytes)} ({share:0.#}%)", Foreground = (Brush)FindResource("Muted"), FontSize = 11, TextTrimming = TextTrimming.CharacterEllipsis, Width = 122 });
+            var row = new Grid { Margin = new Thickness(0, 1.5, 0, 1.5) };
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            var dot = new Border
+            {
+                Width = 8,
+                Height = 8,
+                CornerRadius = new CornerRadius(4),
+                Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString(segment.Color)),
+                Margin = new Thickness(0, 0, 7, 0),
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            var label = new TextBlock
+            {
+                Text = $"{segment.Name}: {ByteSizeFormatter.Format(segment.Bytes)} ({share:0.#}%)",
+                Foreground = (Brush)FindResource("Ink"),
+                Opacity = 0.88,
+                FontSize = 11,
+                TextTrimming = TextTrimming.CharacterEllipsis
+            };
+            Grid.SetColumn(dot, 0);
+            Grid.SetColumn(label, 1);
+            row.Children.Add(dot);
+            row.Children.Add(label);
             DiskLegendPanel.Children.Add(row);
         }
 
         var drives = snapshot.Drives ?? [];
         if (drives.Count > 0)
         {
-            DiskLegendPanel.Children.Add(new TextBlock { Text = $"Выбрано дисков: {drives.Count}", Foreground = (Brush)FindResource("Ink"), FontSize = 11, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 7, 0, 1) });
-            foreach (var drive in drives)
+            DiskLegendPanel.Children.Add(new Border
+            {
+                Height = 1,
+                Background = (Brush)FindResource("Line"),
+                Margin = new Thickness(0, 6, 0, 5)
+            });
+            foreach (var drive in drives.Take(2))
             {
                 var root = drive.Root.TrimEnd('\\');
                 var share = drive.TotalBytes <= 0 ? 0 : drive.FreeBytes * 100d / drive.TotalBytes;
                 DiskLegendPanel.Children.Add(new TextBlock
                 {
-                    Text = $"{root}: {ByteSizeFormatter.Format(drive.TotalBytes)} · свободно {ByteSizeFormatter.Format(drive.FreeBytes)} ({share:0.#}%)",
+                    Text = $"Диск {root} · свободно {ByteSizeFormatter.Format(drive.FreeBytes)} из {ByteSizeFormatter.Format(drive.TotalBytes)} ({share:0.#}%)",
                     Foreground = (Brush)FindResource("Muted"),
-                    FontSize = 10,
-                    TextTrimming = TextTrimming.CharacterEllipsis,
-                    Width = 205
+                    FontSize = 10.5,
+                    TextTrimming = TextTrimming.CharacterEllipsis
                 });
             }
         }
