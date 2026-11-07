@@ -15,6 +15,7 @@ public partial class MainWindow : Window
     private readonly CleanerSettingsService _settingsService = new();
     private readonly CleanupPolicyService _policyService = new();
     private readonly DiskUsageService _diskUsageService = new();
+    private readonly UpdateInstallerService _updateInstallerService = new();
     private IReadOnlyList<string> _selectedDriveRoots;
     private int _minimumFileAgeHours;
     private CancellationTokenSource? _scanCancellation;
@@ -46,7 +47,15 @@ public partial class MainWindow : Window
         _minimumFileAgeHours = _policyService.LoadMinimumAgeHours();
         UpdateDriveButtonCaption();
         UpdateFreeSpaceIndicator();
-        Loaded += async (_, _) => await UpdateDiskUsageAsync();
+        Loaded += async (_, _) =>
+        {
+            var updateFailure = _updateInstallerService.ConsumeInstallFailure();
+            if (updateFailure is not null)
+            {
+                await Dialog.ShowMessageAsync("Обновление Cleaner", updateFailure);
+            }
+            await UpdateDiskUsageAsync();
+        };
         Unloaded += (_, _) => _diskUsageCancellation?.Cancel();
         RestoreLatestActivity();
         ShowHome();
@@ -372,7 +381,7 @@ public partial class MainWindow : Window
 
     private void SettingsNavigation_Click(object sender, RoutedEventArgs e)
     {
-        ShowPage(new SettingsView(_minimumFileAgeHours, _selectedDriveRoots.Count, ApplyMinimumAge, ShowDriveSelection), SettingsNavButton);
+        ShowPage(new SettingsView(_minimumFileAgeHours, _selectedDriveRoots.Count, ApplyMinimumAge, ShowDriveSelection, Dialog), SettingsNavButton);
     }
 
     private async void ApplyMinimumAge(int minimumFileAgeHours)

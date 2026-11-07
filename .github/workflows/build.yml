@@ -1,4 +1,4 @@
-name: Build and test
+name: Build and release
 
 on:
   push:
@@ -6,9 +6,14 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: windows-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@v7
 
@@ -16,6 +21,24 @@ jobs:
         uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '8.0.x'
+
+      - name: Read and validate version
+        id: version
+        shell: pwsh
+        run: |
+          $version = [string](dotnet msbuild Cleaner.csproj -nologo -getProperty:Version)
+          if ($LASTEXITCODE -ne 0) { throw "Не удалось прочитать версию Cleaner.csproj" }
+          $version = $version.Trim()
+          if ($version -notmatch '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$') {
+              throw "Версия должна иметь формат MAJOR.MINOR.PATCH без ведущих нулей: $version"
+          }
+          foreach ($part in $version.Split('.')) {
+              $number = 0
+              if (-not [int]::TryParse($part, [ref]$number)) {
+                  throw "Компонент версии должен быть целым числом в диапазоне 0..2147483647: $part"
+              }
+          }
+          "version=$version" >> $env:GITHUB_OUTPUT
 
       - name: Restore
         run: dotnet restore Cleaner.Tests/Cleaner.Tests.csproj --locked-mode
@@ -30,5 +53,144 @@ jobs:
         run: ./scripts/publish-windows.ps1
 
       - name: Verify published executable
+        shell: pwsh
         run: |
           if (!(Test-Path publish/win-x64/Cleaner.exe)) { throw "Cleaner.exe was not published" }
+
+      - name: Create SHA-256 file
+        if: github.event_name == 'push'
+        shell: pwsh
+        run: |
+          $executable = "publish/win-x64/Cleaner.exe"
+          $checksum = (Get-FileHash -LiteralPath $executable -Algorithm SHA256).Hash.ToLowerInvariant()
+          [System.IO.File]::WriteAllText("$executable.sha256", $checksum, [System.Text.Encoding]::ASCII)
+
+      - name: Upload release files
+        if: github.event_name == 'push'
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-files
+          path: |
+            publish/win-x64/Cleaner.exe
+            publish/win-x64/Cleaner.exe.sha256
+          if-no-files-found: error
+          retention-days: 3
+
+  release:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download release files
+        uses: actions/download-artifact@v8
+        with:
+          name: release-files
+          path: release-files
+
+      - name: Create or update release and remove older versions
+        uses: actions/github-script@v9
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const fs = await import('node:fs/promises');
+            const { owner, repo } = context.repo;
+            const version = process.env.VERSION;
+            const parseVersion = value => {
+              const match = /^v?(\d+)\.(\d+)\.(\d+)$/.exec(value);
+              return match ? match.slice(1).map(BigInt) : null;
+            };
+            const compare = (left, right) => {
+              for (let index = 0; index < 3; index++) {
+                if (left[index] < right[index]) return -1;
+                if (left[index] > right[index]) return 1;
+              }
+              return 0;
+            };
+            const currentVersion = parseVersion(version);
+            if (!currentVersion || !/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(version)) {
+              throw new Error(`Invalid project version: ${version}`);
+            }
+            const tagName = `v${version}`;
+            const [refs, releases] = await Promise.all([
+              github.paginate(github.rest.git.listMatchingRefs, { owner, repo, ref: 'tags/v' }),
+              github.paginate(github.rest.repos.listReleases, { owner, repo, per_page: 100 })
+            ]);
+            const versionTags = refs.map(ref => {
+              const name = ref.ref.slice('refs/tags/'.length);
+              const parsed = parseVersion(name);
+              return parsed ? { name, parsed, ref: ref.ref } : null;
+            }).filter(Boolean);
+            const versionReleases = releases.map(release => {
+              const parsed = parseVersion(release.tag_name);
+              return parsed ? { release, parsed, name: release.tag_name } : null;
+            }).filter(Boolean);
+            const knownVersions = [...versionTags, ...versionReleases];
+            const highest = knownVersions.reduce((top, item) => !top || compare(item.parsed, top.parsed) > 0 ? item : top, null);
+            if (highest && compare(currentVersion, highest.parsed) < 0) {
+              throw new Error(`Project version ${version} is below the latest existing version ${highest.name}. Increase Cleaner.csproj Version.`);
+            }
+
+            let release = releases.find(item => item.tag_name === tagName);
+            let createdRelease = false;
+            if (!release) {
+              const response = await github.rest.repos.createRelease({
+                owner,
+                repo,
+                tag_name: tagName,
+                target_commitish: context.sha,
+                name: tagName,
+                generate_release_notes: true,
+                draft: false,
+                prerelease: false
+              });
+              release = response.data;
+              createdRelease = true;
+            }
+
+            try {
+              const requiredAssets = [
+                { name: 'Cleaner.exe', path: 'release-files/Cleaner.exe' },
+                { name: 'Cleaner.exe.sha256', path: 'release-files/Cleaner.exe.sha256' }
+              ];
+              for (const asset of requiredAssets) {
+                if (release.assets.some(existing => existing.name === asset.name)) continue;
+                const data = await fs.readFile(asset.path);
+                await github.rest.repos.uploadReleaseAsset({
+                  owner,
+                  repo,
+                  release_id: release.id,
+                  name: asset.name,
+                  data,
+                  headers: {
+                    'content-type': 'application/octet-stream',
+                    'content-length': data.length
+                  }
+                });
+              }
+            } catch (error) {
+              if (createdRelease) {
+                try {
+                  await github.rest.repos.deleteRelease({ owner, repo, release_id: release.id });
+                  await github.rest.git.deleteRef({ owner, repo, ref: `tags/${tagName}` });
+                } catch (cleanupError) {
+                  core.warning(`Could not roll back the incomplete release: ${cleanupError.message}`);
+                }
+              }
+              throw error;
+            }
+
+            const oldReleases = versionReleases.filter(item => item.name !== tagName && compare(item.parsed, currentVersion) <= 0);
+            for (const item of oldReleases) {
+              await github.rest.repos.deleteRelease({ owner, repo, release_id: item.release.id });
+              core.info(`Deleted old release ${item.name}`);
+            }
+            const oldTags = versionTags.filter(item => item.name !== tagName && compare(item.parsed, currentVersion) <= 0);
+            for (const item of oldTags) {
+              await github.rest.git.deleteRef({ owner, repo, ref: item.ref.slice('refs/'.length) });
+              core.info(`Deleted old tag ${item.name}`);
+            }
+            core.notice(`Published ${tagName}; removed ${oldReleases.length} old releases and ${oldTags.length} old tags.`);

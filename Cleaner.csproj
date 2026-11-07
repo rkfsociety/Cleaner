@@ -3,6 +3,7 @@
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
+    <Version>0.0.1</Version>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
@@ -13,6 +14,7 @@
 
   <ItemGroup>
     <Resource Include="assets\cleaner-icon.ico" />
+    <EmbeddedResource Include="scripts\apply-update.ps1" LogicalName="Cleaner.ApplyUpdate.ps1" />
   </ItemGroup>
 
   <ItemGroup>
