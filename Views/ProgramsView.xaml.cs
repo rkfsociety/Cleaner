@@ -16,6 +16,7 @@ public partial class ProgramsView : UserControl
     private IReadOnlyList<InstalledProgram> _programs = [];
     private CancellationTokenSource? _loadCancellation;
     private bool _uninstallRunning;
+    private bool _hasLoadedOnce;
     private ProgramSortMode _sortMode = ProgramSortMode.LeastRecentlyUsed;
     private SortDirection _sortDirection = SortDirection.Ascending;
     private bool _sortWasSelected;
@@ -25,7 +26,13 @@ public partial class ProgramsView : UserControl
         InitializeComponent();
         _dialog = dialog;
         _uninstallService = new ProgramUninstallService(_programsService);
-        Loaded += async (_, _) => await ReloadAsync();
+        Loaded += async (_, _) =>
+        {
+            if (!_hasLoadedOnce)
+            {
+                await ReloadAsync();
+            }
+        };
         Unloaded += (_, _) => _loadCancellation?.Cancel();
     }
 
@@ -35,11 +42,12 @@ public partial class ProgramsView : UserControl
         _loadCancellation?.Dispose();
         _loadCancellation = new CancellationTokenSource();
         RefreshButton.IsEnabled = false;
-        UninstallButton.IsEnabled = false;
+        UpdateActionButtons();
         SummaryText.Text = "Читаем список программ и журнал запусков...";
         try
         {
             _programs = await _programsService.LoadAsync(_loadCancellation.Token);
+            _hasLoadedOnce = true;
             ApplyFilters();
         }
         catch (OperationCanceledException)
@@ -56,10 +64,23 @@ public partial class ProgramsView : UserControl
         }
     }
 
+    private int GetSelectedUnusedDays()
+    {
+        if (IdleFilterCombo.SelectedItem is ComboBoxItem item &&
+            item.Tag is string text &&
+            int.TryParse(text, out var days))
+        {
+            return days;
+        }
+
+        return 0;
+    }
+
     private void ApplyFilters()
     {
         var now = DateTimeOffset.Now;
-        var filtered = InstalledProgramsService.Filter(_programs, SearchBox.Text, 0, now);
+        var unusedDays = GetSelectedUnusedDays();
+        var filtered = InstalledProgramsService.Filter(_programs, SearchBox.Text, unusedDays, now);
         var sorted = InstalledProgramsService.Sort(filtered, _sortMode, _sortDirection);
         ProgramsList.ItemsSource = sorted.Select(program => new ProgramRow(
             program.Name,
@@ -70,7 +91,7 @@ public partial class ProgramsView : UserControl
             FormatIdle(program.LastUsedAt, now),
             program.LastUsedSource,
             program)).ToArray();
-        UninstallButton.IsEnabled = false;
+        UpdateActionButtons();
 
         var withUsage = _programs.Count(program => program.LastUsedSource == "журнал запусков");
         var totalBytes = filtered.Sum(program => program.EstimatedBytes);
@@ -106,7 +127,9 @@ public partial class ProgramsView : UserControl
         else
         {
             _sortMode = mode;
-            _sortDirection = SortDirection.Ascending;
+            _sortDirection = mode is ProgramSortMode.LargestFirst or ProgramSortMode.NewestInstall
+                ? SortDirection.Descending
+                : SortDirection.Ascending;
             _sortWasSelected = true;
         }
 
@@ -134,9 +157,26 @@ public partial class ProgramsView : UserControl
         }
     }
 
+    private void IdleFilterCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (IsLoaded)
+        {
+            ApplyFilters();
+        }
+    }
+
     private void ProgramsList_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        UninstallButton.IsEnabled = SelectedProgram() is not null && !_uninstallRunning;
+        UpdateActionButtons();
+    }
+
+    private void UpdateActionButtons()
+    {
+        var selected = SelectedProgram();
+        var canAct = selected is not null && !_uninstallRunning;
+        UninstallButton.IsEnabled = canAct;
+        ScanResidualsButton.IsEnabled = canAct;
+        OpenFolderButton.IsEnabled = canAct && !string.IsNullOrWhiteSpace(selected!.InstallLocation) && Directory.Exists(selected.InstallLocation);
     }
 
     private async void ProgramsList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
@@ -148,6 +188,70 @@ public partial class ProgramsView : UserControl
     }
 
     private async void UninstallButton_Click(object sender, RoutedEventArgs e) => await UninstallSelectedAsync();
+
+    private async void OpenFolderButton_Click(object sender, RoutedEventArgs e)
+    {
+        var program = SelectedProgram();
+        if (program is null || string.IsNullOrWhiteSpace(program.InstallLocation) || !Directory.Exists(program.InstallLocation))
+        {
+            await _dialog.ShowMessageAsync("Папка установки", "Папка установки для этой программы не указана в реестре или отсутствует на диске.");
+            return;
+        }
+
+        try
+        {
+            Process.Start(new ProcessStartInfo("explorer.exe", $"\"{program.InstallLocation}\"") { UseShellExecute = true });
+        }
+        catch (Exception exception) when (exception is Win32Exception or IOException)
+        {
+            AppLogService.Write($"Не удалось открыть папку установки «{program.Name}»", exception);
+            await _dialog.ShowMessageAsync("Папка установки", "Не удалось открыть Проводник для выбранной папки.");
+        }
+    }
+
+    private async void ScanResidualsButton_Click(object sender, RoutedEventArgs e)
+    {
+        var program = SelectedProgram();
+        if (program is null || _uninstallRunning)
+        {
+            return;
+        }
+
+        _uninstallRunning = true;
+        UpdateActionButtons();
+        RefreshButton.IsEnabled = false;
+        SummaryText.Text = $"Ищем файлы и связанные папки «{program.Name}»...";
+        try
+        {
+            var files = await Task.Run(() => _residuals.Find(program));
+            if (files.Count == 0)
+            {
+                await _dialog.ShowMessageAsync("Поиск остатков", $"Для «{program.Name}» не найдено доступных папок установки или связанных папок в профиле.");
+                return;
+            }
+
+            if (_programsService.IsStillInstalled(program))
+            {
+                var bytes = files.Sum(file => file.Size);
+                var roots = files.Select(file => file.Root).Distinct(StringComparer.OrdinalIgnoreCase).Take(4).ToArray();
+                await _dialog.ShowMessageAsync(
+                    "Связанные данные программы",
+                    $"Программа «{program.Name}» сейчас установлена.\n\nНайдено связанных файлов: {files.Count:N0} ({ByteSizeFormatter.Format(bytes)}).\nПапки: {string.Join("; ", roots)}\n\nЧтобы безопасно удалить программу и её остатки, нажмите «Удалить программу».");
+                return;
+            }
+
+            var outcome = new UninstallOutcome(false, null, false, string.Empty, files, _residuals.FindRegistryEntries(program));
+            await OfferResidualCleanupAsync(program, outcome);
+            await ReloadAsync();
+        }
+        finally
+        {
+            _uninstallRunning = false;
+            RefreshButton.IsEnabled = true;
+            UpdateActionButtons();
+            ApplyFilters();
+        }
+    }
 
     private InstalledProgram? SelectedProgram() => (ProgramsList.SelectedItem as ProgramRow)?.Program;
 
@@ -178,7 +282,7 @@ public partial class ProgramsView : UserControl
         }
 
         _uninstallRunning = true;
-        UninstallButton.IsEnabled = false;
+        UpdateActionButtons();
         RefreshButton.IsEnabled = false;
         SummaryText.Text = $"Запущен деинсталлятор «{program.Name}». Завершите удаление в его окне.";
         UninstallOutcome outcome;
@@ -190,6 +294,7 @@ public partial class ProgramsView : UserControl
         {
             _uninstallRunning = false;
             RefreshButton.IsEnabled = true;
+            UpdateActionButtons();
         }
 
         AppLogService.Write($"Удаление «{program.Name}»: запущено={outcome.Started}, код={outcome.ExitCode?.ToString() ?? "нет"}, осталась={outcome.StillInstalled}");

@@ -23,6 +23,8 @@ public partial class MainWindow : Window
     private CancellationTokenSource? _diskUsageCancellation;
     private System.Windows.Shapes.Path? _diskUsageLoadingPath;
     private ScanResult? _lastScan;
+    private readonly HashSet<string> _excludedScanPaths = new(StringComparer.OrdinalIgnoreCase);
+    private ProgramsView? _programsView;
     private Button? _activeNavButton;
     private static readonly TimeSpan MaximumScanAge = TimeSpan.FromMinutes(5);
 
@@ -134,6 +136,7 @@ public partial class MainWindow : Window
         {
             var result = await _scanService.ScanAsync(_selectedDriveRoots, _scanCancellation.Token, progress);
             _lastScan = result;
+            _excludedScanPaths.Clear();
 
             StatusText.Text = result.TotalBytes == 0 ? "Всё чисто" : $"Найдено {FormatBytes(result.TotalBytes)}";
             StatusDetails.Text = $"Проверено файлов: {result.TotalFiles:N0}";
@@ -183,7 +186,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        ShowPage(new ScanDetailsView(_lastScan, ShowHome), null);
+        ShowPage(new ScanDetailsView(_lastScan, _excludedScanPaths, ShowHome), null);
     }
 
     private async void CleanButton_Click(object sender, RoutedEventArgs e)
@@ -242,10 +245,16 @@ public partial class MainWindow : Window
             }
         }
 
-        var selectedBytes = (deleteUserTemp ? _lastScan.UserTempBytes : 0) +
-            (deleteWindowsTemp ? _lastScan.WindowsTempBytes : 0) +
+        var userSelectedBytes = deleteUserTemp
+            ? _lastScan.UserTempFiles.Where(file => !_excludedScanPaths.Contains(file.Path)).Sum(file => file.Bytes)
+            : 0;
+        var windowsSelectedBytes = deleteWindowsTemp
+            ? _lastScan.WindowsTempFiles.Where(file => !_excludedScanPaths.Contains(file.Path)).Sum(file => file.Bytes)
+            : 0;
+        var selectedBytes = userSelectedBytes +
+            windowsSelectedBytes +
             (deleteRecycleBin ? _lastScan.RecycleBin.Bytes : 0);
-        var runningBrowsers = new[] { "chrome", "msedge", "firefox" }
+        var runningBrowsers = new[] { "chrome", "msedge", "firefox", "brave", "vivaldi", "browser", "opera" }
             .Where(name => Process.GetProcessesByName(name).Length > 0)
             .ToArray();
         var browserWarning = runningBrowsers.Length > 0
@@ -277,7 +286,7 @@ public partial class MainWindow : Window
         });
         try
         {
-            var cleanup = await _scanService.DeleteAsync(_lastScan, _selectedDriveRoots, deleteUserTemp, deleteWindowsTemp, deleteRecycleBin, _minimumFileAgeHours, _cleanupCancellation.Token, progress);
+            var cleanup = await _scanService.DeleteAsync(_lastScan, _selectedDriveRoots, deleteUserTemp, deleteWindowsTemp, deleteRecycleBin, _minimumFileAgeHours, _cleanupCancellation.Token, progress, _excludedScanPaths);
             var scopes = new List<string>();
             if (deleteUserTemp) scopes.Add("Пользовательский Temp");
             if (deleteWindowsTemp) scopes.Add("Системный Temp");
@@ -290,6 +299,7 @@ public partial class MainWindow : Window
             ActivityResultText.Text = $"Удалено файлов: {cleanup.DeletedFiles:N0}";
             ActivitySizeText.Text = $"Освобождено {FormatBytes(cleanup.ReclaimedBytes)} · пропущено: {cleanup.SkippedFiles:N0}" + (historySaved ? string.Empty : ". История не сохранена");
             _lastScan = null;
+            _excludedScanPaths.Clear();
             DetailsButton.IsEnabled = false;
             UserTempValue.Text = "—";
             WindowsTempValue.Text = "—";
@@ -297,7 +307,7 @@ public partial class MainWindow : Window
             UserTempSubtitle.Text = "Требуется повторная проверка";
             WindowsTempSubtitle.Text = "Требуется повторная проверка";
             RecycleBinSubtitle.Text = "Требуется повторная проверка";
-            UpdateFreeSpaceIndicator();
+            await UpdateDiskUsageAsync();
         }
         catch (OperationCanceledException)
         {
@@ -371,7 +381,8 @@ public partial class MainWindow : Window
 
     private void ProgramsNavigation_Click(object sender, RoutedEventArgs e)
     {
-        ShowPage(new ProgramsView(Dialog), ProgramsNavButton);
+        _programsView ??= new ProgramsView(Dialog);
+        ShowPage(_programsView, ProgramsNavButton);
     }
 
     private void HistoryNavigation_Click(object sender, RoutedEventArgs e)

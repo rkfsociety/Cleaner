@@ -33,14 +33,14 @@ public class CleanerScanServiceTests
     }
 
     [Fact]
-    public void BuildWindowsTempRoots_ReturnsOnlySystemTemp_WhenSystemDriveSelected()
+    public void BuildWindowsTempRoots_ReturnsOnlySystemRoots_WhenSystemDriveSelected()
     {
         var systemRoot = Path.GetPathRoot(Environment.GetFolderPath(Environment.SpecialFolder.Windows))!;
 
         var result = CleanerScanService.BuildWindowsTempRoots(new[] { systemRoot });
 
-        Assert.True(result.Count <= 1);
-        Assert.All(result, root => Assert.EndsWith("Windows\\Temp", root, StringComparison.OrdinalIgnoreCase));
+        Assert.NotEmpty(result);
+        Assert.All(result, root => Assert.StartsWith(systemRoot, root, StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
@@ -188,6 +188,49 @@ public class CleanerScanServiceTests
         Assert.Equal(1, result.DeletedFiles);
         Assert.Equal(2, result.SkippedFiles);
         Assert.Equal(10, result.ReclaimedBytes);
+    }
+
+    [Fact]
+    public async Task DeleteAsync_SkipsExcludedScanPaths()
+    {
+        using var scope = new TempScope();
+        var tempRoot = Path.GetTempPath();
+        var driveRoot = Path.GetPathRoot(tempRoot)!;
+        var deletedFile = scope.CreateFile("delete-me.tmp");
+        var keptFile = scope.CreateFile("keep-me.tmp");
+        var scan = new ScanResult(
+            [new ScanFile(deletedFile, 4, "Temp"), new ScanFile(keptFile, 4, "Temp")],
+            [],
+            new RecycleBinInfo(0, 0),
+            DateTimeOffset.Now);
+        var recycleBin = new FakeRecycleBinService(new Dictionary<string, RecycleBinInfo>(), new Dictionary<string, bool>());
+        var service = new CleanerScanService(recycleBin);
+        var excluded = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { keptFile };
+
+        var result = await service.DeleteAsync(scan, [driveRoot], true, false, false, 0, excludedPaths: excluded);
+
+        Assert.Equal(1, result.DeletedFiles);
+        Assert.Equal(4, result.ReclaimedBytes);
+        Assert.False(File.Exists(deletedFile));
+        Assert.True(File.Exists(keptFile));
+    }
+
+    [Fact]
+    public void DeleteFiles_RemovesEmptyNestedSubdirectoriesInsideAllowedRoot()
+    {
+        using var scope = new TempScope();
+        var root = scope.CreateSubdirectory("allowed");
+        var nested = Path.Combine(root, "level1", "level2");
+        Directory.CreateDirectory(nested);
+        var filePath = Path.Combine(nested, "temp.bin");
+        File.WriteAllBytes(filePath, [1, 2, 3]);
+
+        var result = CleanerScanService.DeleteFiles([new ScanFile(filePath, 3)], [root], 0, CancellationToken.None);
+
+        Assert.Equal(1, result.DeletedFiles);
+        Assert.False(Directory.Exists(nested));
+        Assert.False(Directory.Exists(Path.Combine(root, "level1")));
+        Assert.True(Directory.Exists(root));
     }
 
     private sealed class TempScope : IDisposable

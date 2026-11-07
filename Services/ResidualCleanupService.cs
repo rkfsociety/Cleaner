@@ -1,4 +1,5 @@
 using System.IO;
+using System.IO.Enumeration;
 using System.Security;
 using Microsoft.Win32;
 
@@ -36,12 +37,13 @@ public sealed class ResidualCleanupService
 
     public ResidualCleanupResult Delete(IEnumerable<ResidualFile> files)
     {
+        var fileList = files as IReadOnlyList<ResidualFile> ?? files.ToArray();
         var deleted = 0;
         var skipped = 0;
         long bytes = 0;
         var skippedByReason = new Dictionary<CleanupSkipReason, int>();
 
-        foreach (var file in files)
+        foreach (var file in fileList)
         {
             var attempt = WindowsSafeDeleteService.TryDelete(file.Path, file.Root);
             if (attempt.Succeeded)
@@ -56,7 +58,7 @@ public sealed class ResidualCleanupService
             }
         }
 
-        RemoveEmptyDirectories(files.Select(file => file.Path));
+        RemoveEmptyDirectories(fileList);
         return new ResidualCleanupResult(deleted, skipped, bytes, skippedByReason);
     }
 
@@ -214,36 +216,42 @@ public sealed class ResidualCleanupService
         return words.Length > 0 && words.All(candidateKey.Contains);
     }
 
+    private static readonly EnumerationOptions ResidualEnumerationOptions = new()
+    {
+        IgnoreInaccessible = true,
+        RecurseSubdirectories = true,
+        ReturnSpecialDirectories = false,
+        AttributesToSkip = FileAttributes.ReparsePoint
+    };
+
     private static void EnumerateFiles(string directory, string root, List<ResidualFile> files, HashSet<string> seen)
     {
-        if (files.Count >= MaxFiles || IsReparsePoint(directory))
+        if (files.Count >= MaxFiles || !Directory.Exists(directory) || IsReparsePoint(directory))
         {
             return;
         }
 
         try
         {
-            foreach (var file in Directory.EnumerateFiles(directory, "*", SearchOption.TopDirectoryOnly))
+            var enumerable = new FileSystemEnumerable<ResidualFile>(
+                directory,
+                (ref FileSystemEntry entry) => new ResidualFile(entry.ToFullPath(), entry.Length, root),
+                ResidualEnumerationOptions)
             {
-                if (files.Count >= MaxFiles || IsReparsePoint(file) || !seen.Add(file))
-                {
-                    continue;
-                }
+                ShouldIncludePredicate = (ref FileSystemEntry entry) => !entry.IsDirectory && (entry.Attributes & FileAttributes.ReparsePoint) == 0,
+                ShouldRecursePredicate = (ref FileSystemEntry entry) => (entry.Attributes & FileAttributes.ReparsePoint) == 0
+            };
 
-                try
-                {
-                    files.Add(new ResidualFile(file, new FileInfo(file).Length, root));
-                }
-                catch (IOException) { }
-                catch (UnauthorizedAccessException) { }
-            }
-
-            foreach (var child in Directory.EnumerateDirectories(directory, "*", SearchOption.TopDirectoryOnly))
+            foreach (var item in enumerable)
             {
-                EnumerateFiles(child, root, files, seen);
                 if (files.Count >= MaxFiles)
                 {
-                    return;
+                    break;
+                }
+
+                if (seen.Add(item.Path))
+                {
+                    files.Add(item);
                 }
             }
         }
@@ -251,15 +259,38 @@ public sealed class ResidualCleanupService
         catch (UnauthorizedAccessException) { }
     }
 
-    private static void RemoveEmptyDirectories(IEnumerable<string> files)
+    internal static void RemoveEmptyDirectories(IEnumerable<ResidualFile> files)
     {
-        foreach (var directory in files.Select(Path.GetDirectoryName).Where(path => !string.IsNullOrWhiteSpace(path)).Distinct(StringComparer.OrdinalIgnoreCase))
+        var candidates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var file in files)
+        {
+            var rootPrefix = file.Root.TrimEnd(Path.DirectorySeparatorChar);
+            var current = Path.GetDirectoryName(file.Path);
+            while (!string.IsNullOrWhiteSpace(current))
+            {
+                var trimmed = current.TrimEnd(Path.DirectorySeparatorChar);
+                if (!trimmed.StartsWith(rootPrefix, StringComparison.OrdinalIgnoreCase))
+                {
+                    break;
+                }
+
+                candidates.Add(trimmed);
+                if (string.Equals(trimmed, rootPrefix, StringComparison.OrdinalIgnoreCase))
+                {
+                    break;
+                }
+
+                current = Path.GetDirectoryName(trimmed);
+            }
+        }
+
+        foreach (var directory in candidates.OrderByDescending(path => path.Length))
         {
             try
             {
-                if (!IsReparsePoint(directory!) && Directory.Exists(directory) && !Directory.EnumerateFileSystemEntries(directory).Any())
+                if (!IsReparsePoint(directory) && Directory.Exists(directory) && !Directory.EnumerateFileSystemEntries(directory).Any())
                 {
-                    Directory.Delete(directory);
+                    Directory.Delete(directory, recursive: false);
                 }
             }
             catch (IOException) { }

@@ -6,7 +6,7 @@
         <StackPanel>
             <TextBlock Text="Настройки очистки" Style="{StaticResource PageTitle}" />
             <TextBlock Text="Настройки применяются только к Temp и кэшам браузеров" Foreground="{StaticResource Muted}" FontSize="13" Margin="0,6,0,22" />
-            <CheckBox x:Name="AgeFilterCheckBox" Content="Не удалять файлы младше 24 часов" FontSize="14" Padding="0" VerticalContentAlignment="Center" Margin="0,0,0,2" />
+            <CheckBox x:Name="AgeFilterCheckBox" Content="Не удалять файлы младше 24 часов" FontSize="14" Padding="0" VerticalContentAlignment="Center" Margin="0,0,0,2" Click="AgeFilterCheckBox_Click" />
             <TextBlock Text="Свежие файлы часто используются работающими приложениями. При включённом режиме они будут пропущены и попадут в отчёт как недоступные для очистки." Foreground="{StaticResource Muted}" FontSize="12" TextWrapping="Wrap" Margin="6,6,0,20" />
             <TextBlock x:Name="AdminStatusText" Foreground="#3B9A73" FontSize="13" />
             <TextBlock x:Name="DriveStatusText" Foreground="{StaticResource Muted}" FontSize="13" Margin="0,6,0,0" />

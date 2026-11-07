@@ -6,23 +6,54 @@
         <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
-            <StackPanel Grid.Row="0" Margin="0,0,0,14">
+            <StackPanel Grid.Row="0" Margin="0,0,0,10">
                 <TextBlock Text="Найденные данные" Style="{StaticResource PageTitle}" />
                 <TextBlock x:Name="SummaryText" Margin="0,5,0,0" Foreground="{StaticResource Muted}" FontSize="13" TextWrapping="Wrap" />
             </StackPanel>
-            <ListView Grid.Row="1" x:Name="FilesList" Background="Transparent" BorderBrush="{StaticResource Line}" BorderThickness="1" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+            <Grid Grid.Row="1" Margin="0,0,0,10">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="Поиск" Foreground="{StaticResource Muted}" FontSize="13" VerticalAlignment="Center" Margin="0,0,8,0" />
+                <TextBox x:Name="SearchBox" Grid.Column="1" Height="30" VerticalContentAlignment="Center" Padding="8,0" TextChanged="SearchBox_TextChanged" />
+                <Button Grid.Column="2" Content="Выбрать все" Style="{StaticResource SecondaryButton}" Height="30" Padding="12,0" Margin="8,0,0,0" Click="SelectAllButton_Click" />
+                <Button Grid.Column="3" Content="Снять все" Style="{StaticResource SecondaryButton}" Height="30" Padding="12,0" Margin="8,0,0,0" Click="ClearAllButton_Click" />
+            </Grid>
+            <ListView Grid.Row="2" x:Name="FilesList" Background="Transparent" BorderBrush="{StaticResource Line}" BorderThickness="1"
+                      ScrollViewer.HorizontalScrollBarVisibility="Disabled" SelectionMode="Single" SelectionChanged="FilesList_SelectionChanged">
                 <ListView.View>
                     <GridView>
-                        <GridViewColumn Header="Категория" DisplayMemberBinding="{Binding Category}" Width="185" />
-                        <GridViewColumn Header="Размер" DisplayMemberBinding="{Binding Size}" Width="85" />
-                        <GridViewColumn Header="Путь" DisplayMemberBinding="{Binding Path}" Width="530" />
+                        <GridViewColumn Width="44">
+                            <GridViewColumnHeader Content="✓" />
+                            <GridViewColumn.CellTemplate>
+                                <DataTemplate>
+                                    <CheckBox IsChecked="{Binding IsIncluded, Mode=TwoWay}" Padding="0" VerticalContentAlignment="Center" HorizontalAlignment="Center" Click="ItemCheckBox_Click" />
+                                </DataTemplate>
+                            </GridViewColumn.CellTemplate>
+                        </GridViewColumn>
+                        <GridViewColumn DisplayMemberBinding="{Binding Category}" Width="180">
+                            <GridViewColumnHeader x:Name="CategoryHeader" Content="Категория" Tag="Category" Click="ColumnHeader_Click" />
+                        </GridViewColumn>
+                        <GridViewColumn DisplayMemberBinding="{Binding Size}" Width="90">
+                            <GridViewColumnHeader x:Name="SizeHeader" Content="Размер ▼" Tag="Size" Click="ColumnHeader_Click" />
+                        </GridViewColumn>
+                        <GridViewColumn DisplayMemberBinding="{Binding Path}" Width="470">
+                            <GridViewColumnHeader x:Name="PathHeader" Content="Путь" Tag="Path" Click="ColumnHeader_Click" />
+                        </GridViewColumn>
                     </GridView>
                 </ListView.View>
             </ListView>
-            <Button Grid.Row="2" Content="Назад" Style="{StaticResource SecondaryButton}" HorizontalAlignment="Right" Margin="0,14,0,0" Click="BackButton_Click" />
+            <Grid Grid.Row="3" Margin="0,14,0,0">
+                <Button x:Name="OpenLocationButton" Content="Показать в папке" Style="{StaticResource SecondaryButton}" HorizontalAlignment="Left" IsEnabled="False" Click="OpenLocationButton_Click" />
+                <Button Content="Назад" Style="{StaticResource SecondaryButton}" HorizontalAlignment="Right" Click="BackButton_Click" />
+            </Grid>
         </Grid>
     </Border>
 </UserControl>

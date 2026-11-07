@@ -173,6 +173,33 @@ public class InstalledProgramsServiceTests
     }
 
     [Fact]
+    public void Sort_ByPublisher_OrdersAndPlacesEmptyPublisherLast()
+    {
+        var programs = new[]
+        {
+            Program("Без издателя", null, publisher: ""),
+            Program("Вторая", null, publisher: "Zeta"),
+            Program("Первая", null, publisher: "Alpha")
+        };
+
+        Assert.Equal(["Первая", "Вторая", "Без издателя"], InstalledProgramsService.Sort(programs, ProgramSortMode.Publisher, SortDirection.Ascending).Select(program => program.Name));
+        Assert.Equal(["Вторая", "Первая", "Без издателя"], InstalledProgramsService.Sort(programs, ProgramSortMode.Publisher, SortDirection.Descending).Select(program => program.Name));
+    }
+
+    [Fact]
+    public void Sort_BySource_TogglesAscendingAndDescending()
+    {
+        var programs = new[]
+        {
+            Program("Без данных", null),
+            Program("С запуском", DateTimeOffset.Now)
+        };
+
+        Assert.Equal(["С запуском", "Без данных"], InstalledProgramsService.Sort(programs, ProgramSortMode.Source, SortDirection.Ascending).Select(program => program.Name));
+        Assert.Equal(["Без данных", "С запуском"], InstalledProgramsService.Sort(programs, ProgramSortMode.Source, SortDirection.Descending).Select(program => program.Name));
+    }
+
+    [Fact]
     public void Filter_ByUnusedDays_KeepsIdleAndUnknownPrograms()
     {
         var now = new DateTimeOffset(2026, 8, 23, 12, 0, 0, TimeSpan.Zero);

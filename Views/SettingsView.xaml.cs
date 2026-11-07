@@ -34,7 +34,11 @@ public partial class SettingsView : UserControl
         }
     }
 
-    private void SaveButton_Click(object sender, RoutedEventArgs e)
+    private void AgeFilterCheckBox_Click(object sender, RoutedEventArgs e) => SaveCurrentAgeSetting();
+
+    private void SaveButton_Click(object sender, RoutedEventArgs e) => SaveCurrentAgeSetting();
+
+    private void SaveCurrentAgeSetting()
     {
         _apply(AgeFilterCheckBox.IsChecked == true ? 24 : 0);
         SaveStatusText.Text = $"Сохранено в {DateTime.Now:HH:mm}";

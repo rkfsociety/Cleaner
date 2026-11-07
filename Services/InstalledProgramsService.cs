@@ -25,7 +25,9 @@ public enum ProgramSortMode
     MostRecentlyUsed,
     LargestFirst,
     NewestInstall,
-    Name
+    Name,
+    Publisher,
+    Source
 }
 
 public enum SortDirection
@@ -100,7 +102,17 @@ public sealed class InstalledProgramsService
             ProgramSortMode.LargestFirst => (descending ? items.OrderByDescending(program => program.EstimatedBytes) : items.OrderBy(program => program.EstimatedBytes))
                 .ThenBy(program => program.Name, StringComparer.CurrentCultureIgnoreCase)
                 .ToArray(),
-            ProgramSortMode.NewestInstall => (descending ? items.OrderByDescending(program => program.InstalledAt.HasValue ? 0 : 1).ThenByDescending(program => program.InstalledAt ?? DateTimeOffset.MinValue) : items.OrderBy(program => program.InstalledAt.HasValue ? 0 : 1).ThenBy(program => program.InstalledAt ?? DateTimeOffset.MaxValue))
+            ProgramSortMode.NewestInstall => (descending ? items.OrderBy(program => program.InstalledAt.HasValue ? 0 : 1).ThenByDescending(program => program.InstalledAt ?? DateTimeOffset.MinValue) : items.OrderBy(program => program.InstalledAt.HasValue ? 0 : 1).ThenBy(program => program.InstalledAt ?? DateTimeOffset.MaxValue))
+                .ThenBy(program => program.Name, StringComparer.CurrentCultureIgnoreCase)
+                .ToArray(),
+            ProgramSortMode.Publisher => (descending
+                ? items.OrderBy(program => string.IsNullOrWhiteSpace(program.Publisher) ? 1 : 0).ThenByDescending(program => program.Publisher, StringComparer.CurrentCultureIgnoreCase)
+                : items.OrderBy(program => string.IsNullOrWhiteSpace(program.Publisher) ? 1 : 0).ThenBy(program => program.Publisher, StringComparer.CurrentCultureIgnoreCase))
+                .ThenBy(program => program.Name, StringComparer.CurrentCultureIgnoreCase)
+                .ToArray(),
+            ProgramSortMode.Source => (descending
+                ? items.OrderByDescending(program => program.LastUsedSource, StringComparer.CurrentCultureIgnoreCase)
+                : items.OrderBy(program => program.LastUsedSource, StringComparer.CurrentCultureIgnoreCase))
                 .ThenBy(program => program.Name, StringComparer.CurrentCultureIgnoreCase)
                 .ToArray(),
             _ => (descending ? items.OrderByDescending(program => program.Name, StringComparer.CurrentCultureIgnoreCase) : items.OrderBy(program => program.Name, StringComparer.CurrentCultureIgnoreCase)).ToArray()

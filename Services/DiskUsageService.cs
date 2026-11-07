@@ -1,4 +1,5 @@
 using System.IO;
+using System.IO.Enumeration;
 using System.Text.Json;
 
 namespace Cleaner;
@@ -17,12 +18,12 @@ public sealed class DiskUsageService
 {
     private static readonly TimeSpan CacheLifetime = TimeSpan.FromMinutes(5);
     private readonly string _cachePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Cleaner", "disk-usage-cache.json");
-    private static readonly (string Name, string RelativePath, string Color)[] KnownCategories =
+    private static readonly (string Name, string[] RelativePaths, string Color)[] KnownCategories =
     [
-        ("Windows", "Windows", "#6C5CE7"),
-        ("Программы", "Program Files", "#EF8E5B"),
-        ("Пользователи", "Users", "#45B79C"),
-        ("Данные программ", "ProgramData", "#4B8BCB")
+        ("Windows", ["Windows"], "#6C5CE7"),
+        ("Программы", ["Program Files", "Program Files (x86)"], "#EF8E5B"),
+        ("Пользователи", ["Users"], "#45B79C"),
+        ("Данные программ", ["ProgramData"], "#4B8BCB")
     ];
 
     public Task<DiskUsageSnapshot?> ReadAsync(IEnumerable<string> driveRoots, CancellationToken cancellationToken = default)
@@ -67,11 +68,19 @@ public sealed class DiskUsageService
                 driveSummaries.Add(new DiskUsageDriveSummary(drive.RootDirectory.FullName, drive.TotalSize, free));
                 totalBytes += drive.TotalSize;
                 totalFreeBytes += free;
+
+                var computed = KnownCategories
+                    .AsParallel()
+                    .WithCancellation(cancellationToken)
+                    .Select(category => (
+                        category.Name,
+                        Bytes: category.RelativePaths.Sum(relative => GetDirectoryBytes(Path.Combine(drive.RootDirectory.FullName, relative), cancellationToken))))
+                    .ToDictionary(item => item.Name, item => item.Bytes, StringComparer.OrdinalIgnoreCase);
+
                 long knownBytes = 0;
                 foreach (var category in KnownCategories)
                 {
-                    var bytes = GetDirectoryBytes(Path.Combine(drive.RootDirectory.FullName, category.RelativePath), cancellationToken);
-                    bytes = Math.Min(bytes, drive.TotalSize - free - knownBytes);
+                    var bytes = Math.Min(computed[category.Name], Math.Max(0, drive.TotalSize - free - knownBytes));
                     knownBytes += bytes;
                     categoryBytes[category.Name] += bytes;
                 }
@@ -143,7 +152,15 @@ public sealed class DiskUsageService
 
     private sealed record DiskUsageCache(string Signature, DateTimeOffset CapturedAt, DiskUsageSnapshot Snapshot);
 
-    private static long GetDirectoryBytes(string path, CancellationToken cancellationToken)
+    private static readonly EnumerationOptions FastEnumerationOptions = new()
+    {
+        IgnoreInaccessible = true,
+        RecurseSubdirectories = true,
+        ReturnSpecialDirectories = false,
+        AttributesToSkip = FileAttributes.ReparsePoint
+    };
+
+    internal static long GetDirectoryBytes(string path, CancellationToken cancellationToken)
     {
         if (!Directory.Exists(path) || IsReparsePoint(path))
         {
@@ -151,32 +168,30 @@ public sealed class DiskUsageService
         }
 
         long total = 0;
-        var directories = new Stack<string>();
-        directories.Push(path);
-        while (directories.Count > 0)
+        try
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            var directory = directories.Pop();
-            try
+            var enumerable = new FileSystemEnumerable<long>(
+                path,
+                (ref FileSystemEntry entry) => entry.IsDirectory ? 0L : entry.Length,
+                FastEnumerationOptions)
             {
-                foreach (var file in Directory.EnumerateFiles(directory, "*", SearchOption.TopDirectoryOnly))
+                ShouldIncludePredicate = (ref FileSystemEntry entry) => !entry.IsDirectory && (entry.Attributes & FileAttributes.ReparsePoint) == 0,
+                ShouldRecursePredicate = (ref FileSystemEntry entry) => (entry.Attributes & FileAttributes.ReparsePoint) == 0
+            };
+
+            var count = 0;
+            foreach (var length in enumerable)
+            {
+                if ((++count & 255) == 0)
                 {
-                    if (!IsReparsePoint(file))
-                    {
-                        try { total += new FileInfo(file).Length; }
-                        catch (IOException) { }
-                        catch (UnauthorizedAccessException) { }
-                    }
+                    cancellationToken.ThrowIfCancellationRequested();
                 }
 
-                foreach (var child in Directory.EnumerateDirectories(directory, "*", SearchOption.TopDirectoryOnly))
-                {
-                    if (!IsReparsePoint(child)) directories.Push(child);
-                }
+                total += length;
             }
-            catch (IOException) { }
-            catch (UnauthorizedAccessException) { }
         }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
 
         return total;
     }

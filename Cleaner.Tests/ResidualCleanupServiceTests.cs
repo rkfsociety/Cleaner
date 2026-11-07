@@ -36,4 +36,29 @@ public class ResidualCleanupServiceTests
     {
         Assert.Equal(expected, ResidualCleanupService.IsRelatedName(candidate, installLeaf, programName));
     }
+
+    [Fact]
+    public void Delete_RemovesEmptyNestedDirectoriesBottomUp()
+    {
+        var root = Directory.CreateTempSubdirectory("cleaner-residual-nested-");
+        try
+        {
+            var nested = Path.Combine(root.FullName, "a", "b", "c");
+            Directory.CreateDirectory(nested);
+            var filePath = Path.Combine(nested, "leftover.dat");
+            File.WriteAllBytes(filePath, [1, 2, 3, 4]);
+
+            var result = new ResidualCleanupService().Delete([new ResidualFile(filePath, 4, root.FullName)]);
+
+            Assert.Equal(1, result.DeletedFiles);
+            Assert.False(Directory.Exists(root.FullName));
+        }
+        finally
+        {
+            if (root.Exists)
+            {
+                root.Delete(true);
+            }
+        }
+    }
 }
