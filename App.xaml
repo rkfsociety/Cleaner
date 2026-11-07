@@ -4,23 +4,76 @@
              xmlns:local="clr-namespace:Cleaner"
              StartupUri="Views/MainWindow.xaml">
     <Application.Resources>
-        <SolidColorBrush x:Key="WindowBackground" Color="#0D1017" />
-        <SolidColorBrush x:Key="PanelBackground" Color="#131823" />
-        <SolidColorBrush x:Key="CardBackground" Color="#19202E" />
-        <SolidColorBrush x:Key="InputBackground" Color="#1F2738" />
-        <SolidColorBrush x:Key="Ink" Color="#F2F4F8" />
-        <SolidColorBrush x:Key="Muted" Color="#9BA6BA" />
-        <SolidColorBrush x:Key="Purple" Color="#8B7CFF" />
-        <SolidColorBrush x:Key="PurpleLight" Color="#272442" />
-        <SolidColorBrush x:Key="Line" Color="#293244" />
+        <SolidColorBrush x:Key="WindowBackground" Color="#0C0F17" />
+        <SolidColorBrush x:Key="PanelBackground" Color="#111622" />
+        <SolidColorBrush x:Key="CardBackground" Color="#161D2B" />
+        <SolidColorBrush x:Key="InputBackground" Color="#1C2436" />
+        <SolidColorBrush x:Key="Ink" Color="#F4F6FB" />
+        <SolidColorBrush x:Key="Muted" Color="#8E9BB0" />
+        <SolidColorBrush x:Key="Purple" Color="#8576FF" />
+        <SolidColorBrush x:Key="PurpleLight" Color="#262347" />
+        <SolidColorBrush x:Key="Line" Color="#232C3E" />
+        <SolidColorBrush x:Key="LineHighlight" Color="#35425C" />
+
+        <Style x:Key="CaptionButton" TargetType="Button">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Foreground" Value="#8E9BB0" />
+            <Setter Property="Width" Value="44" />
+            <Setter Property="Height" Value="38" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="WindowChrome.IsHitTestVisibleInChrome" Value="True" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" SnapsToDevicePixels="True">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#222B3D" />
+                    <Setter Property="Foreground" Value="#FFFFFF" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="CloseCaptionButton" TargetType="Button">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Foreground" Value="#8E9BB0" />
+            <Setter Property="Width" Value="44" />
+            <Setter Property="Height" Value="38" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="WindowChrome.IsHitTestVisibleInChrome" Value="True" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" SnapsToDevicePixels="True">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#E81123" />
+                    <Setter Property="Foreground" Value="#FFFFFF" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
 
         <Style x:Key="NavButton" TargetType="Button">
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="Foreground" Value="#A5AEC0" />
-            <Setter Property="FontSize" Value="14" />
+            <Setter Property="Foreground" Value="#A2ADC2" />
+            <Setter Property="FontSize" Value="13.5" />
             <Setter Property="HorizontalContentAlignment" Value="Left" />
-            <Setter Property="Padding" Value="16,11" />
+            <Setter Property="Padding" Value="14,10" />
             <Setter Property="Margin" Value="0,2" />
             <Setter Property="Cursor" Value="Hand" />
             <Setter Property="Template">
@@ -34,7 +87,7 @@
             </Setter>
             <Style.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Background" Value="#232A3C" />
+                    <Setter Property="Background" Value="#1E2638" />
                     <Setter Property="Foreground" Value="{StaticResource Purple}" />
                 </Trigger>
                 <Trigger Property="IsEnabled" Value="False">
@@ -54,9 +107,9 @@
         <Style x:Key="PrimaryButton" TargetType="Button">
             <Setter Property="Background" Value="{StaticResource Purple}" />
             <Setter Property="Foreground" Value="#FFFFFF" />
-            <Setter Property="FontSize" Value="14" />
+            <Setter Property="FontSize" Value="13.5" />
             <Setter Property="FontWeight" Value="SemiBold" />
-            <Setter Property="Padding" Value="22,12" />
+            <Setter Property="Padding" Value="22,11" />
             <Setter Property="BorderThickness" Value="0" />
             <Setter Property="Cursor" Value="Hand" />
             <Setter Property="Template">
@@ -70,22 +123,22 @@
             </Setter>
             <Style.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Background" Value="#7A6BF2" />
+                    <Setter Property="Background" Value="#7362FA" />
                 </Trigger>
                 <Trigger Property="IsEnabled" Value="False">
-                    <Setter Property="Background" Value="#2A3142" />
-                    <Setter Property="Foreground" Value="#6F7A90" />
+                    <Setter Property="Background" Value="#252D3E" />
+                    <Setter Property="Foreground" Value="#64728C" />
                 </Trigger>
             </Style.Triggers>
         </Style>
 
         <Style x:Key="SecondaryButton" TargetType="Button">
-            <Setter Property="Background" Value="#232B3B" />
+            <Setter Property="Background" Value="#1F2738" />
             <Setter Property="Foreground" Value="{StaticResource Ink}" />
             <Setter Property="FontSize" Value="13" />
             <Setter Property="FontWeight" Value="Medium" />
-            <Setter Property="Padding" Value="15,9" />
-            <Setter Property="BorderBrush" Value="#313B4F" />
+            <Setter Property="Padding" Value="15,8" />
+            <Setter Property="BorderBrush" Value="#2D384D" />
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="Cursor" Value="Hand" />
             <Setter Property="Template">
@@ -99,8 +152,8 @@
             </Setter>
             <Style.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Background" Value="#2E384D" />
-                    <Setter Property="BorderBrush" Value="#43506B" />
+                    <Setter Property="Background" Value="#2A344A" />
+                    <Setter Property="BorderBrush" Value="#3F4D69" />
                 </Trigger>
                 <Trigger Property="IsEnabled" Value="False">
                     <Setter Property="Opacity" Value="0.45" />
@@ -110,7 +163,7 @@
 
         <Style TargetType="CheckBox">
             <Setter Property="Foreground" Value="{StaticResource Ink}" />
-            <Setter Property="FontSize" Value="14" />
+            <Setter Property="FontSize" Value="13.5" />
             <Setter Property="Cursor" Value="Hand" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
             <Setter Property="Template">
@@ -119,7 +172,7 @@
                         <StackPanel Orientation="Horizontal" Background="Transparent">
                             <Border x:Name="BoxBorder" Width="18" Height="18" CornerRadius="5"
                                     Background="{StaticResource InputBackground}"
-                                    BorderBrush="#3E4A63" BorderThickness="1.5"
+                                    BorderBrush="#38455E" BorderThickness="1.5"
                                     VerticalAlignment="Center">
                                 <Path x:Name="CheckMark"
                                       Data="M 3.5,9.0 L 7.2,12.5 L 14.5,4.8"
@@ -200,7 +253,7 @@
             <Setter Property="Padding" Value="6,5" />
             <Style.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Background" Value="#232B3B" />
+                    <Setter Property="Background" Value="#1E2638" />
                 </Trigger>
                 <Trigger Property="IsSelected" Value="True">
                     <Setter Property="Background" Value="{StaticResource PurpleLight}" />
@@ -216,7 +269,7 @@
 
         <Style TargetType="ProgressBar">
             <Setter Property="Foreground" Value="{StaticResource Purple}" />
-            <Setter Property="Background" Value="#252D3F" />
+            <Setter Property="Background" Value="#212A3D" />
             <Setter Property="BorderThickness" Value="0" />
             <Setter Property="Template">
                 <Setter.Value>
@@ -235,7 +288,7 @@
 
         <Style x:Key="PageTitle" TargetType="TextBlock">
             <Setter Property="Foreground" Value="{StaticResource Ink}" />
-            <Setter Property="FontSize" Value="22" />
+            <Setter Property="FontSize" Value="21" />
             <Setter Property="FontWeight" Value="SemiBold" />
         </Style>
     </Application.Resources>

@@ -31,7 +31,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-        SidebarVersionText.Text = $"Версия {CleanerVersion.Current}";
+        TitleVersionText.Text = $"v{CleanerVersion.Current}";
 
         var userName = Environment.UserName.Trim();
         if (string.IsNullOrEmpty(userName))
@@ -104,6 +104,63 @@ public partial class MainWindow : Window
     private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
     {
         e.Handled = Dialog.HandleKey(e.Key);
+    }
+
+    protected override void OnSourceInitialized(EventArgs e)
+    {
+        base.OnSourceInitialized(e);
+        EnableDarkFrame();
+    }
+
+    private void EnableDarkFrame()
+    {
+        try
+        {
+            var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+            if (hwnd == IntPtr.Zero)
+            {
+                return;
+            }
+
+            int trueVal = 1;
+            // DWMWA_USE_IMMERSIVE_DARK_MODE: 20 on Windows 11 / Windows 10 (18985+), 19 on older Windows 10
+            if (DwmSetWindowAttribute(hwnd, 20, ref trueVal, sizeof(int)) != 0)
+            {
+                DwmSetWindowAttribute(hwnd, 19, ref trueVal, sizeof(int));
+            }
+        }
+        catch
+        {
+            // dwmapi is unavailable on non-Windows or legacy environments
+        }
+    }
+
+    [System.Runtime.InteropServices.DllImport("dwmapi.dll", PreserveSig = true)]
+    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
+
+    private void MinimizeButton_Click(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
+
+    private void MaximizeButton_Click(object sender, RoutedEventArgs e)
+    {
+        WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
+    }
+
+    private void CloseButton_Click(object sender, RoutedEventArgs e) => Close();
+
+    private void Window_StateChanged(object? sender, EventArgs e)
+    {
+        if (WindowState == WindowState.Maximized)
+        {
+            WindowFrameBorder.BorderThickness = new Thickness(0);
+            WindowFrameBorder.Margin = new Thickness(7);
+            MaximizeButtonIcon.Data = Geometry.Parse("M 3,1 L 10,1 L 10,8 L 8,8 L 8,10 L 1,10 L 1,3 L 3,3 Z M 3,3 L 8,3 L 8,8 L 3,8 Z");
+        }
+        else
+        {
+            WindowFrameBorder.BorderThickness = new Thickness(1);
+            WindowFrameBorder.Margin = new Thickness(0);
+            MaximizeButtonIcon.Data = Geometry.Parse("M 1,1 L 9,1 L 9,9 L 1,9 Z");
+        }
     }
 
     private async void ScanButton_Click(object sender, RoutedEventArgs e)
