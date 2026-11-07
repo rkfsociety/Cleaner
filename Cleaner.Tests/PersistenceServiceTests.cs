@@ -43,6 +43,15 @@ public sealed class PersistenceServiceTests : IDisposable
         Assert.Equal([0xEF, 0xBB, 0xBF], preamble);
     }
 
+    [Fact]
+    public void AppManifest_HasRequireAdministratorExecutionLevel()
+    {
+        var manifestPath = Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "Properties", "app.manifest");
+        Assert.True(File.Exists(manifestPath), $"Файл манифеста не найден по пути {manifestPath}");
+        var content = File.ReadAllText(manifestPath);
+        Assert.Contains("level=\"requireAdministrator\"", content);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_root))

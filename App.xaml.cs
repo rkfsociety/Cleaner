@@ -1,4 +1,4 @@
-﻿using System.Configuration;
+using System.Configuration;
 using System.Data;
 using System.Diagnostics;
 using System.Security.Principal;
@@ -14,10 +14,44 @@ public partial class App : Application
 {
     public static bool IsSystemCleanupSession => Environment.GetCommandLineArgs().Contains("--system-cleanup", StringComparer.OrdinalIgnoreCase);
     public static bool IsAdministrator => new WindowsPrincipal(WindowsIdentity.GetCurrent()).IsInRole(WindowsBuiltInRole.Administrator);
+
     public App()
     {
         DispatcherUnhandledException += OnDispatcherUnhandledException;
         AppDomain.CurrentDomain.UnhandledException += OnUnhandledException;
+    }
+
+    protected override void OnStartup(StartupEventArgs e)
+    {
+        base.OnStartup(e);
+
+        if (!IsAdministrator)
+        {
+            try
+            {
+                var processPath = Environment.ProcessPath;
+                if (!string.IsNullOrEmpty(processPath))
+                {
+                    var startInfo = new ProcessStartInfo
+                    {
+                        FileName = processPath,
+                        UseShellExecute = true,
+                        Verb = "runas"
+                    };
+                    foreach (var arg in e.Args)
+                    {
+                        startInfo.ArgumentList.Add(arg);
+                    }
+                    Process.Start(startInfo);
+                }
+            }
+            catch (Exception ex)
+            {
+                AppLogService.Write("Не удалось запустить Cleaner с правами администратора", ex);
+            }
+
+            Shutdown();
+        }
     }
 
     private static void OnDispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
