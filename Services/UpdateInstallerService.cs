@@ -72,9 +72,9 @@ public sealed class UpdateInstallerService
         var helperPath = Path.Combine(helperDirectory, "apply-update.ps1");
         using (var resource = typeof(UpdateInstallerService).Assembly.GetManifestResourceStream(InstallerResourceName)
             ?? throw new InvalidOperationException("Не найден встроенный помощник установки Cleaner."))
-        using (var file = File.Create(helperPath))
+        using (var reader = new StreamReader(resource, Encoding.UTF8, detectEncodingFromByteOrderMarks: true))
         {
-            resource.CopyTo(file);
+            File.WriteAllText(helperPath, reader.ReadToEnd(), new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
         }
 
         var startInfo = new ProcessStartInfo

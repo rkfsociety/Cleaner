@@ -33,6 +33,16 @@ public sealed class PersistenceServiceTests : IDisposable
         Assert.False(File.Exists(path));
     }
 
+    [Fact]
+    public void EmbeddedApplyUpdateScript_HasUtf8BomForWindowsPowerShell51()
+    {
+        using var stream = typeof(UpdateInstallerService).Assembly.GetManifestResourceStream("Cleaner.ApplyUpdate.ps1");
+        Assert.NotNull(stream);
+        var preamble = new byte[3];
+        Assert.Equal(3, stream!.Read(preamble, 0, 3));
+        Assert.Equal([0xEF, 0xBB, 0xBF], preamble);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_root))
