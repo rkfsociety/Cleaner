@@ -17,7 +17,10 @@ public sealed record InstalledProgram(
     string InstallLocation,
     string RegistryScope,
     string UninstallString,
-    string RegistryKeyPath);
+    string RegistryKeyPath)
+{
+    public string Architecture => RegistryScope.Contains("32-бит", StringComparison.OrdinalIgnoreCase) ? "x86" : "x64";
+}
 
 public enum ProgramSortMode
 {
@@ -120,7 +123,7 @@ public sealed class InstalledProgramsService
     }
 
     /// <summary>Отбор по подстроке в названии или издателе и по числу дней без запуска.</summary>
-    public static IReadOnlyList<InstalledProgram> Filter(IEnumerable<InstalledProgram> programs, string? search, int unusedDays, DateTimeOffset now)
+    public static IReadOnlyList<InstalledProgram> Filter(IEnumerable<InstalledProgram> programs, string? search, int unusedDays, DateTimeOffset now, string? architectureFilter = null)
     {
         var query = programs;
         if (!string.IsNullOrWhiteSpace(search))
@@ -128,7 +131,14 @@ public sealed class InstalledProgramsService
             var text = search.Trim();
             query = query.Where(program =>
                 program.Name.Contains(text, StringComparison.CurrentCultureIgnoreCase) ||
-                program.Publisher.Contains(text, StringComparison.CurrentCultureIgnoreCase));
+                program.Publisher.Contains(text, StringComparison.CurrentCultureIgnoreCase) ||
+                program.Architecture.Equals(text, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (!string.IsNullOrWhiteSpace(architectureFilter) &&
+            !string.Equals(architectureFilter, "Все", StringComparison.OrdinalIgnoreCase))
+        {
+            query = query.Where(program => string.Equals(program.Architecture, architectureFilter, StringComparison.OrdinalIgnoreCase));
         }
 
         if (unusedDays > 0)

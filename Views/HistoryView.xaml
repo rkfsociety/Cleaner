@@ -23,7 +23,10 @@
                     </GridView>
                 </ListView.View>
             </ListView>
-            <Button Grid.Row="2" x:Name="ClearHistoryButton" Content="Очистить историю" Style="{StaticResource SecondaryButton}" HorizontalAlignment="Right" Margin="0,14,0,0" Click="ClearHistoryButton_Click" />
+            <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,14,0,0">
+                <Button x:Name="ExportHistoryButton" Content="Экспорт..." Style="{StaticResource SecondaryButton}" Margin="0,0,8,0" Click="ExportHistoryButton_Click" />
+                <Button x:Name="ClearHistoryButton" Content="Очистить историю" Style="{StaticResource SecondaryButton}" Click="ClearHistoryButton_Click" />
+            </StackPanel>
         </Grid>
     </Border>
 </UserControl>

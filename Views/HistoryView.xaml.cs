@@ -1,5 +1,7 @@
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using Microsoft.Win32;
 
 namespace Cleaner;
 
@@ -31,6 +33,44 @@ public partial class HistoryView : UserControl
             ? "Очистки ещё не выполнялись."
             : $"Сохранено операций: {rows.Length:N0}. Хранится не больше последних 20.";
         ClearHistoryButton.IsEnabled = rows.Length > 0;
+        ExportHistoryButton.IsEnabled = rows.Length > 0;
+    }
+
+    private async void ExportHistoryButton_Click(object sender, RoutedEventArgs e)
+    {
+        var entries = _historyService.LoadAll();
+        if (entries.Count == 0)
+        {
+            return;
+        }
+
+        var dialog = new SaveFileDialog
+        {
+            Title = "Экспорт отчёта об очистках",
+            Filter = "CSV (разделители — запятые)|*.csv|JSON (*.json)|*.json",
+            FileName = $"cleaner-history-{DateTime.Now:yyyyMMdd-HHmm}"
+        };
+        if (dialog.ShowDialog() != true)
+        {
+            return;
+        }
+
+        try
+        {
+            if (dialog.FilterIndex == 2 || dialog.FileName.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+            {
+                ReportExportService.ExportHistoryJson(dialog.FileName, entries);
+            }
+            else
+            {
+                ReportExportService.ExportHistoryCsv(dialog.FileName, entries);
+            }
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            AppLogService.Write("Ошибка экспорта истории очисток", exception);
+            await _dialog.ShowMessageAsync("Cleaner", "Не удалось сохранить файл отчёта. Проверьте права доступа.");
+        }
     }
 
     private async void ClearHistoryButton_Click(object sender, RoutedEventArgs e)

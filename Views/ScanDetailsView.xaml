@@ -20,11 +20,13 @@
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <TextBlock Grid.Column="0" Text="Поиск" Foreground="{StaticResource Muted}" FontSize="13" VerticalAlignment="Center" Margin="0,0,8,0" />
                 <TextBox x:Name="SearchBox" Grid.Column="1" Height="30" VerticalContentAlignment="Center" Padding="8,0" TextChanged="SearchBox_TextChanged" />
-                <Button Grid.Column="2" Content="Выбрать все" Style="{StaticResource SecondaryButton}" Height="30" Padding="12,0" Margin="8,0,0,0" Click="SelectAllButton_Click" />
-                <Button Grid.Column="3" Content="Снять все" Style="{StaticResource SecondaryButton}" Height="30" Padding="12,0" Margin="8,0,0,0" Click="ClearAllButton_Click" />
+                <ComboBox x:Name="CategoryFilterCombo" Grid.Column="2" Width="210" Height="30" VerticalContentAlignment="Center" Margin="8,0,0,0" SelectionChanged="CategoryFilterCombo_SelectionChanged" />
+                <Button Grid.Column="3" Content="Выбрать видимые" Style="{StaticResource SecondaryButton}" Height="30" Padding="12,0" Margin="8,0,0,0" Click="SelectAllButton_Click" />
+                <Button Grid.Column="4" Content="Снять видимые" Style="{StaticResource SecondaryButton}" Height="30" Padding="12,0" Margin="8,0,0,0" Click="ClearAllButton_Click" />
             </Grid>
             <ListView Grid.Row="2" x:Name="FilesList" Background="Transparent" BorderBrush="{StaticResource Line}" BorderThickness="1"
                       ScrollViewer.HorizontalScrollBarVisibility="Disabled" SelectionMode="Single" SelectionChanged="FilesList_SelectionChanged">
@@ -51,7 +53,10 @@
                 </ListView.View>
             </ListView>
             <Grid Grid.Row="3" Margin="0,14,0,0">
-                <Button x:Name="OpenLocationButton" Content="Показать в папке" Style="{StaticResource SecondaryButton}" HorizontalAlignment="Left" IsEnabled="False" Click="OpenLocationButton_Click" />
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
+                    <Button x:Name="OpenLocationButton" Content="Показать в папке" Style="{StaticResource SecondaryButton}" IsEnabled="False" Click="OpenLocationButton_Click" />
+                    <Button x:Name="ExportButton" Content="Экспорт..." Style="{StaticResource SecondaryButton}" Margin="8,0,0,0" Click="ExportButton_Click" />
+                </StackPanel>
                 <Button Content="Назад" Style="{StaticResource SecondaryButton}" HorizontalAlignment="Right" Click="BackButton_Click" />
             </Grid>
         </Grid>

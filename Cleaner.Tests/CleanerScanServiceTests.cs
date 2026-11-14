@@ -291,6 +291,59 @@ public class CleanerScanServiceTests
         Assert.Equal(expected, MainWindow.IsYandexBrowserExecutablePath(path));
     }
 
+    [Fact]
+    public void DeleteFiles_ReportsDetailedSkipReasons_ForTooNewAndNotFound()
+    {
+        using var scope = new TempScope();
+        var root = scope.CreateSubdirectory("root");
+        var freshFile = Path.Combine(root, "fresh.tmp");
+        File.WriteAllBytes(freshFile, new byte[8]);
+        var missingFile = Path.Combine(root, "missing.tmp");
+
+        var files = new[]
+        {
+            new ScanFile(freshFile, 8, "Temp", DateTime.UtcNow),
+            new ScanFile(missingFile, 4, "Temp", DateTime.UtcNow.AddDays(-2))
+        };
+
+        var result = CleanerScanService.DeleteFiles(files, [root], minimumAgeHours: 24, CancellationToken.None);
+
+        Assert.Equal(0, result.DeletedFiles);
+        Assert.Equal(2, result.SkippedFiles);
+        Assert.NotNull(result.SkipReasons);
+        Assert.Equal(1, result.SkipReasons![CleanupSkipReason.TooNew]);
+        Assert.Equal(1, result.SkipReasons![CleanupSkipReason.NotFound]);
+
+        var formatted = CleanerScanService.FormatSkipReasons(result.SkipReasons, 24);
+        Assert.Contains("младше 24 ч: 1", formatted);
+        Assert.Contains("уже удалены: 1", formatted);
+    }
+
+    [Theory]
+    [InlineData("thumbcache_96.db", true)]
+    [InlineData("THUMBCACHE_256.DB", true)]
+    [InlineData("iconcache_32.db", false)]
+    [InlineData("thumbcache_96.txt", false)]
+    public void IsThumbcacheFileName_MatchesOnlyThumbcacheDb(string fileName, bool expected)
+    {
+        Assert.Equal(expected, CleanerScanService.IsThumbcacheFileName(fileName));
+    }
+
+    [Fact]
+    public void ScanResult_IncludesDevCacheFilesInTotals()
+    {
+        var scan = new ScanResult(
+            [new ScanFile(@"C:\temp\a.tmp", 100)],
+            [new ScanFile(@"C:\win\b.tmp", 200)],
+            new RecycleBinInfo(300, 1),
+            DateTimeOffset.UtcNow,
+            [new ScanFile(@"C:\nuget\c.nupkg", 400)]);
+
+        Assert.Equal(400, scan.DevCacheBytes);
+        Assert.Equal(1000, scan.TotalBytes);
+        Assert.Equal(4, scan.TotalFiles);
+    }
+
     private sealed class TempScope : IDisposable
     {
         private readonly string _root = Path.Combine(Path.GetTempPath(), $"cleaner-test-{Guid.NewGuid():N}");

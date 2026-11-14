@@ -4,6 +4,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
+using Microsoft.Win32;
 
 namespace Cleaner;
 
@@ -11,6 +12,7 @@ public partial class ScanDetailsView : UserControl
 {
     private readonly ScanResult _scan;
     private readonly HashSet<string> _excludedPaths;
+    private readonly AppDialogHost _dialog;
     private readonly Action _back;
     private readonly List<ScanFileRow> _allRows;
     private readonly DispatcherTimer _searchDebounceTimer;
@@ -19,11 +21,12 @@ public partial class ScanDetailsView : UserControl
     private string _sortColumn = "Size";
     private SortDirection _sortDirection = SortDirection.Descending;
 
-    public ScanDetailsView(ScanResult scan, HashSet<string> excludedPaths, Action back)
+    public ScanDetailsView(ScanResult scan, HashSet<string> excludedPaths, AppDialogHost dialog, Action back)
     {
         InitializeComponent();
         _scan = scan;
         _excludedPaths = excludedPaths;
+        _dialog = dialog;
         _back = back;
 
         _searchDebounceTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(180) };
@@ -34,9 +37,19 @@ public partial class ScanDetailsView : UserControl
         };
         Unloaded += (_, _) => _searchDebounceTimer.Stop();
 
-        _allRows = new List<ScanFileRow>(scan.UserTempFiles.Count + scan.WindowsTempFiles.Count);
+        _allRows = new List<ScanFileRow>(scan.UserTempFiles.Count + scan.WindowsTempFiles.Count + scan.DevCacheFilesOrEmpty.Count);
         AddRows(scan.UserTempFiles, "Temp и кэш пользователя");
         AddRows(scan.WindowsTempFiles, "Системный Temp");
+        AddRows(scan.DevCacheFilesOrEmpty, "Кэш инструментов разработки");
+
+        var categories = _allRows
+            .Select(row => row.Category)
+            .Distinct(StringComparer.CurrentCultureIgnoreCase)
+            .OrderBy(c => c, StringComparer.CurrentCultureIgnoreCase)
+            .ToList();
+        categories.Insert(0, "Все категории");
+        CategoryFilterCombo.ItemsSource = categories;
+        CategoryFilterCombo.SelectedIndex = 0;
 
         ApplyFilterAndSort();
     }
@@ -57,6 +70,7 @@ public partial class ScanDetailsView : UserControl
                 file.Bytes,
                 ByteSizeFormatter.Format(file.Bytes),
                 file.Path,
+                file.LastWriteTimeUtc,
                 isIncluded,
                 _excludedPaths,
                 OnRowInclusionChanged));
@@ -80,6 +94,12 @@ public partial class ScanDetailsView : UserControl
     private void ApplyFilterAndSort()
     {
         IEnumerable<ScanFileRow> query = _allRows;
+        if (CategoryFilterCombo?.SelectedItem is string selectedCategory &&
+            !string.Equals(selectedCategory, "Все категории", StringComparison.Ordinal))
+        {
+            query = query.Where(row => string.Equals(row.Category, selectedCategory, StringComparison.CurrentCultureIgnoreCase));
+        }
+
         if (!string.IsNullOrWhiteSpace(SearchBox?.Text))
         {
             var term = SearchBox.Text.Trim();
@@ -119,6 +139,50 @@ public partial class ScanDetailsView : UserControl
         {
             _searchDebounceTimer.Stop();
             _searchDebounceTimer.Start();
+        }
+    }
+
+    private void CategoryFilterCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (IsLoaded)
+        {
+            _searchDebounceTimer.Stop();
+            ApplyFilterAndSort();
+        }
+    }
+
+    private async void ExportButton_Click(object sender, RoutedEventArgs e)
+    {
+        var visibleRows = FilesList.ItemsSource as IEnumerable<ScanFileRow> ?? _allRows;
+        var filesToExport = visibleRows
+            .Select(row => new ScanFile(row.Path, row.Bytes, row.Category, row.LastWriteTimeUtc))
+            .ToArray();
+        var dialog = new SaveFileDialog
+        {
+            Title = "Экспорт отчёта о проверке",
+            Filter = "CSV (разделители — запятые)|*.csv|JSON (*.json)|*.json",
+            FileName = $"cleaner-scan-{DateTime.Now:yyyyMMdd-HHmm}"
+        };
+        if (dialog.ShowDialog() != true)
+        {
+            return;
+        }
+
+        try
+        {
+            if (dialog.FilterIndex == 2 || dialog.FileName.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+            {
+                ReportExportService.ExportScanFilesJson(dialog.FileName, filesToExport);
+            }
+            else
+            {
+                ReportExportService.ExportScanFilesCsv(dialog.FileName, filesToExport);
+            }
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            AppLogService.Write("Ошибка экспорта отчёта сканирования", exception);
+            await _dialog.ShowMessageAsync("Cleaner", "Не удалось сохранить файл отчёта. Проверьте права доступа.");
         }
     }
 
@@ -210,7 +274,7 @@ public partial class ScanDetailsView : UserControl
 
     private void BackButton_Click(object sender, RoutedEventArgs e) => _back();
 
-    private sealed class ScanFileRow(string category, long bytes, string size, string path, bool isIncluded, HashSet<string> excludedPaths, Action<long, bool> onInclusionChanged) : INotifyPropertyChanged
+    private sealed class ScanFileRow(string category, long bytes, string size, string path, DateTime? lastWriteTimeUtc, bool isIncluded, HashSet<string> excludedPaths, Action<long, bool> onInclusionChanged) : INotifyPropertyChanged
     {
         private bool _isIncluded = isIncluded;
 
@@ -218,6 +282,7 @@ public partial class ScanDetailsView : UserControl
         public long Bytes { get; } = bytes;
         public string Size { get; } = size;
         public string Path { get; } = path;
+        public DateTime? LastWriteTimeUtc { get; } = lastWriteTimeUtc;
 
         public bool IsIncluded
         {

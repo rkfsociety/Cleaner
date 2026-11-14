@@ -261,6 +261,7 @@
                                         <CheckBox x:Name="UserTempCheckBox" Content="Временные файлы пользователя" IsChecked="True" Margin="0,4" />
                                         <CheckBox x:Name="WindowsTempCheckBox" Content="Системные временные файлы" IsChecked="False" Margin="0,4" />
                                         <CheckBox x:Name="RecycleBinCheckBox" Content="Содержимое корзины" IsChecked="False" Margin="0,4" />
+                                        <CheckBox x:Name="DevCachesCheckBox" Content="Кэши разработки (NuGet, npm, pip)" IsChecked="False" Margin="0,4" />
                                     </StackPanel>
                                     <Button Grid.Row="2" x:Name="CleanButton" Content="Очистить выбранное" Click="CleanButton_Click" Style="{StaticResource PrimaryButton}" HorizontalAlignment="Left" Margin="0,12,0,0" IsEnabled="False" />
                                 </Grid>

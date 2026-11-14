@@ -263,4 +263,23 @@ public class InstalledProgramsServiceTests
 
         Assert.Equal(path, InstalledProgramsService.ExpandUserAssistPath(path));
     }
+
+    [Fact]
+    public void Filter_SupportsArchitectureFilterAndSearch()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var x64 = Program("App64", now);
+        var x86 = x64 with { Name = "App32", RegistryScope = "Все пользователи (32-бит)" };
+
+        Assert.Equal("x64", x64.Architecture);
+        Assert.Equal("x86", x86.Architecture);
+
+        var onlyX86 = InstalledProgramsService.Filter([x64, x86], null, 0, now, "x86");
+        Assert.Single(onlyX86);
+        Assert.Equal("App32", onlyX86[0].Name);
+
+        var onlyX64 = InstalledProgramsService.Filter([x64, x86], "x64", 0, now);
+        Assert.Single(onlyX64);
+        Assert.Equal("App64", onlyX64[0].Name);
+    }
 }

@@ -1,23 +1,37 @@
+using System.Collections.ObjectModel;
 using System.Windows;
 using System.Windows.Controls;
+using Microsoft.Win32;
 
 namespace Cleaner;
 
 public partial class SettingsView : UserControl
 {
     private readonly Action<int> _apply;
+    private readonly Action<IReadOnlyList<string>> _applyExclusions;
     private readonly Action _openDrives;
     private readonly AppDialogHost _dialog;
+    private readonly ObservableCollection<string> _exclusions;
     private readonly UpdateService _updateService = new();
     private readonly UpdateInstallerService _installerService = new();
     private bool _updateOperationInProgress;
 
-    public SettingsView(int minimumFileAgeHours, int selectedDriveCount, Action<int> apply, Action openDrives, AppDialogHost dialog)
+    public SettingsView(
+        int minimumFileAgeHours,
+        int selectedDriveCount,
+        IReadOnlyList<string> permanentExclusions,
+        Action<int> apply,
+        Action<IReadOnlyList<string>> applyExclusions,
+        Action openDrives,
+        AppDialogHost dialog)
     {
         InitializeComponent();
         _apply = apply;
+        _applyExclusions = applyExclusions;
         _openDrives = openDrives;
         _dialog = dialog;
+        _exclusions = new ObservableCollection<string>(permanentExclusions);
+        ExclusionsList.ItemsSource = _exclusions;
         AgeFilterCheckBox.IsChecked = minimumFileAgeHours > 0;
         AdminStatusText.Text = $"Права администратора: {(App.IsAdministrator ? "включены" : "не включены")}";
         DriveStatusText.Text = $"Выбрано дисков: {selectedDriveCount}; системный диск: {WindowsDriveService.GetSystemDriveRoot().TrimEnd('\\')}";
@@ -153,5 +167,69 @@ public partial class SettingsView : UserControl
         _updateOperationInProgress = inProgress;
         CheckUpdatesButton.IsEnabled = !inProgress;
         InstallCurrentButton.IsEnabled = !inProgress && _installerService.CanInstallCurrentExecutable;
+    }
+
+    private void AddExclusionFolderButton_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new OpenFolderDialog
+        {
+            Title = "Выберите папку для белого списка исключений"
+        };
+        if (dialog.ShowDialog() == true)
+        {
+            AddExclusionPath(dialog.FolderName);
+        }
+    }
+
+    private void AddExclusionFileButton_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new OpenFileDialog
+        {
+            Title = "Выберите файл для белого списка исключений",
+            CheckFileExists = true,
+            Multiselect = true
+        };
+        if (dialog.ShowDialog() == true)
+        {
+            foreach (var file in dialog.FileNames)
+            {
+                AddExclusionPath(file);
+            }
+        }
+    }
+
+    private void AddExclusionPath(string path)
+    {
+        var normalized = ExclusionListService.NormalizePath(path);
+        if (normalized is null)
+        {
+            return;
+        }
+
+        if (!_exclusions.Any(existing => string.Equals(existing, normalized, StringComparison.OrdinalIgnoreCase)))
+        {
+            _exclusions.Add(normalized);
+            SaveExclusions();
+        }
+    }
+
+    private void RemoveExclusionButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (ExclusionsList.SelectedItem is string selected)
+        {
+            _exclusions.Remove(selected);
+            SaveExclusions();
+        }
+    }
+
+    private void ExclusionsList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        RemoveExclusionButton.IsEnabled = ExclusionsList.SelectedItem is string;
+    }
+
+    private void SaveExclusions()
+    {
+        _applyExclusions(_exclusions.ToArray());
+        SaveStatusText.Text = $"Сохранено в {DateTime.Now:HH:mm}";
     }
 }

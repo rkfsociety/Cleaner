@@ -374,6 +374,7 @@ public enum CleanupSkipReason
     NotFound,
     ReparsePoint,
     Changed,
+    TooNew,
     Unknown
 }
 

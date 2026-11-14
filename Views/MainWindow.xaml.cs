@@ -15,9 +15,11 @@ public partial class MainWindow : Window
     private readonly CleanupHistoryService _historyService = new();
     private readonly CleanerSettingsService _settingsService = new();
     private readonly CleanupPolicyService _policyService = new();
+    private readonly ExclusionListService _exclusionService = new();
     private readonly DiskUsageService _diskUsageService = new();
     private readonly UpdateInstallerService _updateInstallerService = new();
     private IReadOnlyList<string> _selectedDriveRoots;
+    private IReadOnlyList<string> _permanentExclusions = [];
     private int _minimumFileAgeHours;
     private CancellationTokenSource? _scanCancellation;
     private CancellationTokenSource? _cleanupCancellation;
@@ -28,6 +30,7 @@ public partial class MainWindow : Window
     private ProgramsView? _programsView;
     private Button? _activeNavButton;
     private static readonly TimeSpan MaximumScanAge = TimeSpan.FromMinutes(5);
+    private const string DevCachesDefaultCaption = "Кэши разработки (NuGet, npm, pip)";
 
     public MainWindow()
     {
@@ -44,6 +47,7 @@ public partial class MainWindow : Window
         UserInitialText.Text = userName[..1].ToUpperInvariant();
         _selectedDriveRoots = _settingsService.LoadSelectedDrives(GetDefaultDriveRoots(), WindowsDriveService.GetSystemDriveRoot());
         _minimumFileAgeHours = _policyService.LoadMinimumAgeHours();
+        _permanentExclusions = _exclusionService.Load();
         UpdateDriveButtonCaption();
         UpdateFreeSpaceIndicator();
         Loaded += async (_, _) =>
@@ -69,6 +73,33 @@ public partial class MainWindow : Window
         PageHost.Visibility = Visibility.Collapsed;
         HomeView.Visibility = Visibility.Visible;
         HighlightNavigation(HomeNavButton);
+        RefreshScanCardsSummary();
+    }
+
+    private void RefreshScanCardsSummary()
+    {
+        if (_lastScan is null)
+        {
+            return;
+        }
+
+        var userIncluded = _lastScan.UserTempFiles.Where(f => !_excludedScanPaths.Contains(f.Path)).ToArray();
+        var winIncluded = _lastScan.WindowsTempFiles.Where(f => !_excludedScanPaths.Contains(f.Path)).ToArray();
+        var devIncluded = _lastScan.DevCacheFilesOrEmpty.Where(f => !_excludedScanPaths.Contains(f.Path)).ToArray();
+
+        UserTempValue.Text = FormatBytes(userIncluded.Sum(f => f.Bytes));
+        UserTempSubtitle.Text = _excludedScanPaths.Count > 0 && userIncluded.Length != _lastScan.UserTempFiles.Count
+            ? $"{userIncluded.Length:N0} из {_lastScan.UserTempFiles.Count:N0} файлов"
+            : $"{_lastScan.UserTempFiles.Count:N0} файлов";
+
+        WindowsTempValue.Text = FormatBytes(winIncluded.Sum(f => f.Bytes));
+        WindowsTempSubtitle.Text = _excludedScanPaths.Count > 0 && winIncluded.Length != _lastScan.WindowsTempFiles.Count
+            ? $"{winIncluded.Length:N0} из {_lastScan.WindowsTempFiles.Count:N0} файлов"
+            : $"{_lastScan.WindowsTempFiles.Count:N0} файлов";
+
+        DevCachesCheckBox.Content = devIncluded.Length > 0
+            ? $"{DevCachesDefaultCaption} — {FormatBytes(devIncluded.Sum(f => f.Bytes))}"
+            : DevCachesDefaultCaption;
     }
 
     private void ShowPage(UIElement page, Button? navButton)
@@ -183,16 +214,13 @@ public partial class MainWindow : Window
 
         try
         {
-            var result = await _scanService.ScanAsync(_selectedDriveRoots, _scanCancellation.Token, progress);
+            var result = await _scanService.ScanAsync(_selectedDriveRoots, _scanCancellation.Token, progress, _permanentExclusions);
             _lastScan = result;
             _excludedScanPaths.Clear();
 
             StatusText.Text = result.TotalBytes == 0 ? "Всё чисто" : $"Найдено {FormatBytes(result.TotalBytes)}";
             StatusDetails.Text = $"Проверено файлов: {result.TotalFiles:N0}";
-            UserTempValue.Text = FormatBytes(result.UserTempBytes);
-            UserTempSubtitle.Text = $"{result.UserTempFiles.Count:N0} файлов";
-            WindowsTempValue.Text = FormatBytes(result.WindowsTempBytes);
-            WindowsTempSubtitle.Text = $"{result.WindowsTempFiles.Count:N0} файлов";
+            RefreshScanCardsSummary();
             RecycleBinValue.Text = FormatBytes(result.RecycleBin.Bytes);
             RecycleBinSubtitle.Text = $"{result.RecycleBin.Items:N0} объектов";
             ActivityText.Text = "Проверка завершена только что";
@@ -235,7 +263,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        ShowPage(new ScanDetailsView(_lastScan, _excludedScanPaths, ShowHome), null);
+        ShowPage(new ScanDetailsView(_lastScan, _excludedScanPaths, Dialog, ShowHome), null);
     }
 
     private async void CleanButton_Click(object sender, RoutedEventArgs e)
@@ -263,7 +291,8 @@ public partial class MainWindow : Window
         var deleteUserTemp = UserTempCheckBox.IsChecked == true;
         var deleteWindowsTemp = WindowsTempCheckBox.IsChecked == true;
         var deleteRecycleBin = RecycleBinCheckBox.IsChecked == true;
-        if (!deleteUserTemp && !deleteWindowsTemp && !deleteRecycleBin)
+        var deleteDevCaches = DevCachesCheckBox.IsChecked == true;
+        if (!deleteUserTemp && !deleteWindowsTemp && !deleteRecycleBin && !deleteDevCaches)
         {
             await Dialog.ShowMessageAsync("Cleaner", "Выберите хотя бы одну категорию для очистки.");
             return;
@@ -286,8 +315,12 @@ public partial class MainWindow : Window
         var windowsSelectedBytes = deleteWindowsTemp
             ? _lastScan.WindowsTempFiles.Where(file => !_excludedScanPaths.Contains(file.Path)).Sum(file => file.Bytes)
             : 0;
+        var devSelectedBytes = deleteDevCaches
+            ? _lastScan.DevCacheFilesOrEmpty.Where(file => !_excludedScanPaths.Contains(file.Path)).Sum(file => file.Bytes)
+            : 0;
         var selectedBytes = userSelectedBytes +
             windowsSelectedBytes +
+            devSelectedBytes +
             (deleteRecycleBin ? _lastScan.RecycleBin.Bytes : 0);
         var runningBrowsers = GetRunningBrowserNames();
         var browserWarning = runningBrowsers.Length > 0
@@ -296,10 +329,13 @@ public partial class MainWindow : Window
         var ageWarning = _minimumFileAgeHours > 0
             ? $"\nФайлы младше {_minimumFileAgeHours} часов будут пропущены."
             : string.Empty;
+        var devWarning = deleteDevCaches
+            ? "\n\nВыбран кэш инструментов разработки (NuGet, npm, Yarn, pnpm, pip): при следующей сборке или установке пакеты будут загружены заново."
+            : string.Empty;
 
         var confirmation = await Dialog.ConfirmAsync(
             "Подтверждение очистки",
-            $"Удалить выбранные данные (до {FormatBytes(selectedBytes)})? Занятые и недоступные файлы будут пропущены.{ageWarning}{browserWarning}",
+            $"Удалить выбранные данные (до {FormatBytes(selectedBytes)})? Занятые и недоступные файлы будут пропущены.{ageWarning}{browserWarning}{devWarning}",
             "Очистить");
         if (!confirmation)
         {
@@ -319,18 +355,23 @@ public partial class MainWindow : Window
         });
         try
         {
-            var cleanup = await _scanService.DeleteAsync(_lastScan, _selectedDriveRoots, deleteUserTemp, deleteWindowsTemp, deleteRecycleBin, _minimumFileAgeHours, _cleanupCancellation.Token, progress, _excludedScanPaths);
+            var cleanup = await _scanService.DeleteAsync(_lastScan, _selectedDriveRoots, deleteUserTemp, deleteWindowsTemp, deleteRecycleBin, _minimumFileAgeHours, _cleanupCancellation.Token, progress, _excludedScanPaths, deleteDevCaches, _permanentExclusions);
             var scopes = new List<string>();
             if (deleteUserTemp) scopes.Add("Пользовательский Temp");
             if (deleteWindowsTemp) scopes.Add("Системный Temp");
+            if (deleteDevCaches) scopes.Add("Кэши разработки");
             if (deleteRecycleBin) scopes.Add("Корзина");
             var scope = string.Join(", ", scopes);
             var historySaved = _historyService.Append(new CleanupHistoryEntry(DateTimeOffset.Now, scope, cleanup.DeletedFiles, cleanup.ReclaimedBytes));
+            var skipSummary = CleanerScanService.FormatSkipReasons(cleanup.SkipReasons, _minimumFileAgeHours);
+            var skipText = cleanup.SkippedFiles > 0 && !string.IsNullOrEmpty(skipSummary)
+                ? $"{cleanup.SkippedFiles:N0} ({skipSummary})"
+                : $"{cleanup.SkippedFiles:N0}";
             StatusText.Text = cleanup.DeletedFiles == 0 ? "Нечего удалить" : "Очистка завершена";
-            StatusDetails.Text = $"Удалено: {cleanup.DeletedFiles:N0}, пропущено: {cleanup.SkippedFiles:N0}";
+            StatusDetails.Text = $"Удалено: {cleanup.DeletedFiles:N0}, пропущено: {skipText}";
             ActivityText.Text = "Очистка выполнена только что";
             ActivityResultText.Text = $"Удалено файлов: {cleanup.DeletedFiles:N0}";
-            ActivitySizeText.Text = $"Освобождено {FormatBytes(cleanup.ReclaimedBytes)} · пропущено: {cleanup.SkippedFiles:N0}" + (historySaved ? string.Empty : ". История не сохранена");
+            ActivitySizeText.Text = $"Освобождено {FormatBytes(cleanup.ReclaimedBytes)} · пропущено: {skipText}" + (historySaved ? string.Empty : ". История не сохранена");
             _lastScan = null;
             _excludedScanPaths.Clear();
             DetailsButton.IsEnabled = false;
@@ -340,6 +381,7 @@ public partial class MainWindow : Window
             UserTempSubtitle.Text = "Требуется повторная проверка";
             WindowsTempSubtitle.Text = "Требуется повторная проверка";
             RecycleBinSubtitle.Text = "Требуется повторная проверка";
+            DevCachesCheckBox.Content = DevCachesDefaultCaption;
             await UpdateDiskUsageAsync(forceRefresh: true);
         }
         catch (OperationCanceledException)
@@ -349,7 +391,9 @@ public partial class MainWindow : Window
             ActivityText.Text = "Очистка отменена пользователем";
             ActivityResultText.Text = "Данные удалялись только до момента отмены";
             _lastScan = null;
+            _excludedScanPaths.Clear();
             DetailsButton.IsEnabled = false;
+            DevCachesCheckBox.Content = DevCachesDefaultCaption;
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
@@ -357,7 +401,9 @@ public partial class MainWindow : Window
             StatusText.Text = "Очистка завершилась с ошибкой";
             StatusDetails.Text = "Часть данных могла быть удалена. Выполните новую проверку.";
             _lastScan = null;
+            _excludedScanPaths.Clear();
             DetailsButton.IsEnabled = false;
+            DevCachesCheckBox.Content = DevCachesDefaultCaption;
         }
         finally
         {
@@ -373,8 +419,10 @@ public partial class MainWindow : Window
     private void InvalidateScan(string status, string details)
     {
         _lastScan = null;
+        _excludedScanPaths.Clear();
         CleanButton.IsEnabled = false;
         DetailsButton.IsEnabled = false;
+        DevCachesCheckBox.Content = DevCachesDefaultCaption;
         StatusText.Text = status;
         StatusDetails.Text = details;
     }
@@ -425,7 +473,16 @@ public partial class MainWindow : Window
 
     private void SettingsNavigation_Click(object sender, RoutedEventArgs e)
     {
-        ShowPage(new SettingsView(_minimumFileAgeHours, _selectedDriveRoots.Count, ApplyMinimumAge, ShowDriveSelection, Dialog), SettingsNavButton);
+        ShowPage(new SettingsView(_minimumFileAgeHours, _selectedDriveRoots.Count, _permanentExclusions, ApplyMinimumAge, ApplyPermanentExclusions, ShowDriveSelection, Dialog), SettingsNavButton);
+    }
+
+    private async void ApplyPermanentExclusions(IReadOnlyList<string> exclusions)
+    {
+        _permanentExclusions = exclusions;
+        if (!_exclusionService.Save(exclusions))
+        {
+            await Dialog.ShowMessageAsync("Cleaner", "Белый список обновлён для текущего запуска, но не сохранён. Проверьте доступ к папке данных Cleaner.");
+        }
     }
 
     private async void ApplyMinimumAge(int minimumFileAgeHours)

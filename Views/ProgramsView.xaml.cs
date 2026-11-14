@@ -5,6 +5,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Threading;
+using Microsoft.Win32;
 
 namespace Cleaner;
 
@@ -16,6 +17,7 @@ public partial class ProgramsView : UserControl
     private readonly AppDialogHost _dialog;
     private readonly DispatcherTimer _searchDebounceTimer;
     private IReadOnlyList<InstalledProgram> _programs = [];
+    private IReadOnlyList<InstalledProgram> _visiblePrograms = [];
     private CancellationTokenSource? _loadCancellation;
     private CancellationTokenSource? _residualCleanupCancellation;
     private bool _uninstallRunning;
@@ -91,21 +93,32 @@ public partial class ProgramsView : UserControl
         return 0;
     }
 
+    private string? GetSelectedArchitecture()
+    {
+        return ArchFilterCombo?.SelectedItem is ComboBoxItem item && item.Tag is string arch
+            ? arch
+            : null;
+    }
+
     private void ApplyFilters()
     {
         var now = DateTimeOffset.Now;
         var unusedDays = GetSelectedUnusedDays();
-        var filtered = InstalledProgramsService.Filter(_programs, SearchBox.Text, unusedDays, now);
+        var arch = GetSelectedArchitecture();
+        var filtered = InstalledProgramsService.Filter(_programs, SearchBox.Text, unusedDays, now, arch);
         var sorted = InstalledProgramsService.Sort(filtered, _sortMode, _sortDirection);
+        _visiblePrograms = sorted;
         ProgramsList.ItemsSource = sorted.Select(program => new ProgramRow(
             program.Name,
             program.Publisher,
+            program.Architecture,
             program.EstimatedBytes > 0 ? ByteSizeFormatter.Format(program.EstimatedBytes) : "—",
             program.InstalledAt is null ? "—" : program.InstalledAt.Value.LocalDateTime.ToString("dd.MM.yyyy"),
             program.LastUsedAt is null ? "нет данных" : program.LastUsedAt.Value.LocalDateTime.ToString("dd.MM.yyyy"),
             FormatIdle(program.LastUsedAt, now),
             program.LastUsedSource,
             program)).ToArray();
+        ExportProgramsButton.IsEnabled = sorted.Count > 0;
         UpdateActionButtons();
 
         var withUsage = _programs.Count(program => program.LastUsedSource == "журнал запусков");
@@ -183,6 +196,15 @@ public partial class ProgramsView : UserControl
         }
     }
 
+    private void ArchFilterCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (IsLoaded)
+        {
+            _searchDebounceTimer.Stop();
+            ApplyFilters();
+        }
+    }
+
     private void ProgramsList_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         UpdateActionButtons();
@@ -195,6 +217,12 @@ public partial class ProgramsView : UserControl
         UninstallButton.IsEnabled = canAct;
         ScanResidualsButton.IsEnabled = canAct;
         OpenFolderButton.IsEnabled = canAct && !string.IsNullOrWhiteSpace(selected!.InstallLocation) && Directory.Exists(selected.InstallLocation);
+        RegistryKeyBox.Text = selected is null || string.IsNullOrWhiteSpace(selected.RegistryKeyPath)
+            ? "Выберите программу, чтобы увидеть путь в реестре"
+            : selected.RegistryKeyPath;
+        UninstallCommandBox.Text = selected is null || string.IsNullOrWhiteSpace(selected.UninstallString)
+            ? "—"
+            : selected.UninstallString;
     }
 
     private async void ProgramsList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
@@ -426,8 +454,45 @@ public partial class ProgramsView : UserControl
         CleanupSkipReason.NotFound => "объект уже отсутствует",
         CleanupSkipReason.ReparsePoint => "ссылка или junction",
         CleanupSkipReason.Changed => "запись изменилась после проверки",
+        CleanupSkipReason.TooNew => "файл младше заданного возраста",
         _ => "ошибка Windows"
     };
+
+    private async void ExportProgramsButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_visiblePrograms.Count == 0)
+        {
+            return;
+        }
+
+        var dialog = new SaveFileDialog
+        {
+            Title = "Экспорт списка программ",
+            Filter = "CSV (разделители — запятые)|*.csv|JSON (*.json)|*.json",
+            FileName = $"cleaner-programs-{DateTime.Now:yyyyMMdd-HHmm}"
+        };
+        if (dialog.ShowDialog() != true)
+        {
+            return;
+        }
+
+        try
+        {
+            if (dialog.FilterIndex == 2 || dialog.FileName.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+            {
+                ReportExportService.ExportProgramsJson(dialog.FileName, _visiblePrograms);
+            }
+            else
+            {
+                ReportExportService.ExportProgramsCsv(dialog.FileName, _visiblePrograms);
+            }
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            AppLogService.Write("Ошибка экспорта списка программ", exception);
+            await _dialog.ShowMessageAsync("Cleaner", "Не удалось сохранить файл экспорта. Проверьте права доступа.");
+        }
+    }
 
     private async void RefreshButton_Click(object sender, RoutedEventArgs e) => await ReloadAsync();
 
@@ -444,5 +509,5 @@ public partial class ProgramsView : UserControl
         }
     }
 
-    private sealed record ProgramRow(string Name, string Publisher, string Size, string Installed, string LastUsed, string Idle, string Source, InstalledProgram Program);
+    private sealed record ProgramRow(string Name, string Publisher, string Arch, string Size, string Installed, string LastUsed, string Idle, string Source, InstalledProgram Program);
 }
