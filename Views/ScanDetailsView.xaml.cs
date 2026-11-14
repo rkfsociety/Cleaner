@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Threading;
 
 namespace Cleaner;
 
@@ -12,6 +13,9 @@ public partial class ScanDetailsView : UserControl
     private readonly HashSet<string> _excludedPaths;
     private readonly Action _back;
     private readonly List<ScanFileRow> _allRows;
+    private readonly DispatcherTimer _searchDebounceTimer;
+    private int _includedCount;
+    private long _includedBytes;
     private string _sortColumn = "Size";
     private SortDirection _sortDirection = SortDirection.Descending;
 
@@ -22,24 +26,55 @@ public partial class ScanDetailsView : UserControl
         _excludedPaths = excludedPaths;
         _back = back;
 
-        _allRows = scan.UserTempFiles
-            .Select(file => new ScanFileRow(
-                string.IsNullOrWhiteSpace(file.Category) ? "Temp и кэш пользователя" : file.Category,
-                file.Bytes,
-                ByteSizeFormatter.Format(file.Bytes),
-                file.Path,
-                !_excludedPaths.Contains(file.Path),
-                _excludedPaths))
-            .Concat(scan.WindowsTempFiles.Select(file => new ScanFileRow(
-                string.IsNullOrWhiteSpace(file.Category) ? "Системный Temp" : file.Category,
-                file.Bytes,
-                ByteSizeFormatter.Format(file.Bytes),
-                file.Path,
-                !_excludedPaths.Contains(file.Path),
-                _excludedPaths)))
-            .ToList();
+        _searchDebounceTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(180) };
+        _searchDebounceTimer.Tick += (_, _) =>
+        {
+            _searchDebounceTimer.Stop();
+            ApplyFilterAndSort();
+        };
+        Unloaded += (_, _) => _searchDebounceTimer.Stop();
+
+        _allRows = new List<ScanFileRow>(scan.UserTempFiles.Count + scan.WindowsTempFiles.Count);
+        AddRows(scan.UserTempFiles, "Temp и кэш пользователя");
+        AddRows(scan.WindowsTempFiles, "Системный Temp");
 
         ApplyFilterAndSort();
+    }
+
+    private void AddRows(IReadOnlyList<ScanFile> files, string fallbackCategory)
+    {
+        foreach (var file in files)
+        {
+            var isIncluded = !_excludedPaths.Contains(file.Path);
+            if (isIncluded)
+            {
+                _includedCount++;
+                _includedBytes += file.Bytes;
+            }
+
+            _allRows.Add(new ScanFileRow(
+                string.IsNullOrWhiteSpace(file.Category) ? fallbackCategory : file.Category,
+                file.Bytes,
+                ByteSizeFormatter.Format(file.Bytes),
+                file.Path,
+                isIncluded,
+                _excludedPaths,
+                OnRowInclusionChanged));
+        }
+    }
+
+    private void OnRowInclusionChanged(long bytes, bool isIncluded)
+    {
+        if (isIncluded)
+        {
+            _includedCount++;
+            _includedBytes += bytes;
+        }
+        else
+        {
+            _includedCount--;
+            _includedBytes -= bytes;
+        }
     }
 
     private void ApplyFilterAndSort()
@@ -74,17 +109,16 @@ public partial class ScanDetailsView : UserControl
 
     private void UpdateSummary()
     {
-        var includedCount = _allRows.Count - _excludedPaths.Count;
-        var includedBytes = _allRows.Where(row => row.IsIncluded).Sum(row => row.Bytes);
         SummaryText.Text = $"Проверка: {_scan.ScannedAt.LocalDateTime:g}. Корзина: {_scan.RecycleBin.Items:N0} объектов ({ByteSizeFormatter.Format(_scan.RecycleBin.Bytes)}). " +
-            $"Выбрано файлов Temp и кэшей: {includedCount:N0} из {_allRows.Count:N0} ({ByteSizeFormatter.Format(includedBytes)}). Снимите галочку, чтобы оставить файл.";
+            $"Выбрано файлов Temp и кэшей: {_includedCount:N0} из {_allRows.Count:N0} ({ByteSizeFormatter.Format(_includedBytes)}). Снимите галочку, чтобы оставить файл.";
     }
 
     private void SearchBox_TextChanged(object sender, TextChangedEventArgs e)
     {
         if (IsLoaded)
         {
-            ApplyFilterAndSort();
+            _searchDebounceTimer.Stop();
+            _searchDebounceTimer.Start();
         }
     }
 
@@ -113,6 +147,7 @@ public partial class ScanDetailsView : UserControl
 
         var activeText = header.Content?.ToString()?.TrimEnd(' ', '▲', '▼') ?? string.Empty;
         header.Content = $"{activeText} {(_sortDirection == SortDirection.Ascending ? '▲' : '▼')}";
+        _searchDebounceTimer.Stop();
         ApplyFilterAndSort();
     }
 
@@ -175,7 +210,7 @@ public partial class ScanDetailsView : UserControl
 
     private void BackButton_Click(object sender, RoutedEventArgs e) => _back();
 
-    private sealed class ScanFileRow(string category, long bytes, string size, string path, bool isIncluded, HashSet<string> excludedPaths) : INotifyPropertyChanged
+    private sealed class ScanFileRow(string category, long bytes, string size, string path, bool isIncluded, HashSet<string> excludedPaths, Action<long, bool> onInclusionChanged) : INotifyPropertyChanged
     {
         private bool _isIncluded = isIncluded;
 
@@ -204,6 +239,7 @@ public partial class ScanDetailsView : UserControl
                     excludedPaths.Add(Path);
                 }
 
+                onInclusionChanged(Bytes, value);
                 PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsIncluded)));
             }
         }

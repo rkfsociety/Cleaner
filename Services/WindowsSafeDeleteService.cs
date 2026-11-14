@@ -46,7 +46,7 @@ internal static class WindowsSafeDeleteService
         public uint FileIndexLow;
     }
 
-    public static DeleteAttemptResult TryDelete(string fullPath, string root)
+    public static DeleteAttemptResult TryDelete(string fullPath, string root, DateTime? maxLastWriteTimeUtc = null)
     {
         var handles = new List<SafeFileHandle>();
         try
@@ -75,9 +75,18 @@ internal static class WindowsSafeDeleteService
                 return new DeleteAttemptResult(false, ClassifyWin32Error(Marshal.GetLastWin32Error()));
             }
 
-            if (IsReparsePoint(file))
+            if (!GetFileInformationByHandle(file, out var fileInformation) || ((FileAttributes)fileInformation.FileAttributes).HasFlag(FileAttributes.ReparsePoint))
             {
                 return new DeleteAttemptResult(false, CleanupSkipReason.ReparsePoint);
+            }
+
+            if (maxLastWriteTimeUtc is { } threshold)
+            {
+                var lastWriteUtc = DateTime.FromFileTimeUtc(((long)fileInformation.LastWriteTimeHigh << 32) | fileInformation.LastWriteTimeLow);
+                if (lastWriteUtc > threshold)
+                {
+                    return new DeleteAttemptResult(false, CleanupSkipReason.Changed);
+                }
             }
 
             var disposition = new FileDispositionInformation { DeleteFile = true };

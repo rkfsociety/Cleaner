@@ -233,6 +233,39 @@ public class CleanerScanServiceTests
         Assert.True(Directory.Exists(root));
     }
 
+    [Fact]
+    public void DeleteFiles_SkipsFile_WhenCachedLastWriteTimeIsRecent()
+    {
+        using var scope = new TempScope();
+        var root = scope.CreateSubdirectory("allowed");
+        var filePath = Path.Combine(root, "old-on-disk.tmp");
+        File.WriteAllBytes(filePath, [1, 2, 3, 4]);
+        File.SetLastWriteTimeUtc(filePath, DateTime.UtcNow.AddHours(-48));
+
+        var files = new[] { new ScanFile(filePath, 4, "Temp", DateTime.UtcNow) };
+        var result = CleanerScanService.DeleteFiles(files, [root], minimumAgeHours: 24, CancellationToken.None);
+
+        Assert.Equal(0, result.DeletedFiles);
+        Assert.Equal(1, result.SkippedFiles);
+        Assert.True(File.Exists(filePath));
+    }
+
+    [Fact]
+    public void DeleteFiles_SkipsFile_WhenFileBecameRecentAfterScan()
+    {
+        using var scope = new TempScope();
+        var root = scope.CreateSubdirectory("allowed");
+        var filePath = Path.Combine(root, "updated.tmp");
+        File.WriteAllBytes(filePath, [1, 2, 3, 4]);
+
+        var files = new[] { new ScanFile(filePath, 4, "Temp", DateTime.UtcNow.AddHours(-48)) };
+        var result = CleanerScanService.DeleteFiles(files, [root], minimumAgeHours: 24, CancellationToken.None);
+
+        Assert.Equal(0, result.DeletedFiles);
+        Assert.Equal(1, result.SkippedFiles);
+        Assert.True(File.Exists(filePath));
+    }
+
     private sealed class TempScope : IDisposable
     {
         private readonly string _root = Path.Combine(Path.GetTempPath(), $"cleaner-test-{Guid.NewGuid():N}");

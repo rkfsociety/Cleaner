@@ -35,7 +35,20 @@ public sealed class ResidualCleanupService
         return files;
     }
 
-    public ResidualCleanupResult Delete(IEnumerable<ResidualFile> files)
+    public ResidualCleanupResult Delete(IEnumerable<ResidualFile> files) => Delete(files, CancellationToken.None, null);
+
+    public Task<ResidualCleanupResult> DeleteAsync(
+        IEnumerable<ResidualFile> files,
+        CancellationToken cancellationToken = default,
+        IProgress<CleanupProgress>? progress = null)
+    {
+        return Task.Run(() => Delete(files, cancellationToken, progress), cancellationToken);
+    }
+
+    public ResidualCleanupResult Delete(
+        IEnumerable<ResidualFile> files,
+        CancellationToken cancellationToken,
+        IProgress<CleanupProgress>? progress = null)
     {
         var fileList = files as IReadOnlyList<ResidualFile> ?? files.ToArray();
         var deleted = 0;
@@ -45,6 +58,7 @@ public sealed class ResidualCleanupService
 
         foreach (var file in fileList)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var attempt = WindowsSafeDeleteService.TryDelete(file.Path, file.Root);
             if (attempt.Succeeded)
             {
@@ -56,9 +70,15 @@ public sealed class ResidualCleanupService
                 skipped++;
                 skippedByReason[attempt.Reason] = skippedByReason.GetValueOrDefault(attempt.Reason) + 1;
             }
+
+            if (((deleted + skipped) & 31) == 0)
+            {
+                progress?.Report(new CleanupProgress("Удаление остатков", deleted, skipped, bytes));
+            }
         }
 
-        RemoveEmptyDirectories(fileList);
+        RemoveEmptyDirectories(fileList, cancellationToken);
+        progress?.Report(new CleanupProgress("Удаление остатков", deleted, skipped, bytes));
         return new ResidualCleanupResult(deleted, skipped, bytes, skippedByReason);
     }
 
@@ -259,11 +279,12 @@ public sealed class ResidualCleanupService
         catch (UnauthorizedAccessException) { }
     }
 
-    internal static void RemoveEmptyDirectories(IEnumerable<ResidualFile> files)
+    internal static void RemoveEmptyDirectories(IEnumerable<ResidualFile> files, CancellationToken cancellationToken = default)
     {
         var candidates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var file in files)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var rootPrefix = file.Root.TrimEnd(Path.DirectorySeparatorChar);
             var current = Path.GetDirectoryName(file.Path);
             while (!string.IsNullOrWhiteSpace(current))
@@ -286,6 +307,7 @@ public sealed class ResidualCleanupService
 
         foreach (var directory in candidates.OrderByDescending(path => path.Length))
         {
+            cancellationToken.ThrowIfCancellationRequested();
             try
             {
                 if (!IsReparsePoint(directory) && Directory.Exists(directory) && !Directory.EnumerateFileSystemEntries(directory).Any())

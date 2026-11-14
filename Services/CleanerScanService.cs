@@ -1,9 +1,10 @@
+using System.Collections.Concurrent;
 using System.IO;
 using System.IO.Enumeration;
 
 namespace Cleaner;
 
-public sealed record ScanFile(string Path, long Bytes, string Category = "");
+public sealed record ScanFile(string Path, long Bytes, string Category = "", DateTime? LastWriteTimeUtc = null);
 public sealed record CleanupResult(int DeletedFiles, int SkippedFiles, long ReclaimedBytes);
 public sealed record ScanProgress(string Stage, int FilesFound, long BytesFound);
 public sealed record CleanupProgress(string Stage, int DeletedFiles, int SkippedFiles, long ReclaimedBytes);
@@ -284,19 +285,43 @@ public sealed class CleanerScanService
 
     private static List<ScanFile> ScanMany(IEnumerable<string> paths, string stage, CancellationToken cancellationToken, IProgress<ScanProgress>? progress)
     {
-        var files = new List<ScanFile>();
-        var totalBytes = 0L;
-        foreach (var path in paths)
+        var pathList = paths as IReadOnlyList<string> ?? paths.ToArray();
+        if (pathList.Count == 0)
         {
-            foreach (var file in ScanDirectory(path, stage, cancellationToken))
+            return [];
+        }
+
+        var buckets = new ConcurrentBag<List<ScanFile>>();
+        var totalFiles = 0;
+        var totalBytes = 0L;
+        var options = new ParallelOptions
+        {
+            MaxDegreeOfParallelism = Math.Clamp(Environment.ProcessorCount, 2, 4),
+            CancellationToken = cancellationToken
+        };
+
+        Parallel.ForEach(pathList, options, path =>
+        {
+            var localFiles = ScanDirectory(path, stage, cancellationToken, bytes =>
             {
-                files.Add(file);
-                totalBytes += file.Bytes;
-                if ((files.Count & 127) == 0)
+                var filesCount = Interlocked.Increment(ref totalFiles);
+                var bytesCount = Interlocked.Add(ref totalBytes, bytes);
+                if ((filesCount & 127) == 0)
                 {
-                    progress?.Report(new ScanProgress(stage, files.Count, totalBytes));
+                    progress?.Report(new ScanProgress(stage, filesCount, bytesCount));
                 }
+            });
+
+            if (localFiles.Count > 0)
+            {
+                buckets.Add(localFiles);
             }
+        });
+
+        var files = new List<ScanFile>(totalFiles);
+        foreach (var bucket in buckets)
+        {
+            files.AddRange(bucket);
         }
 
         return files;
@@ -310,7 +335,7 @@ public sealed class CleanerScanService
         AttributesToSkip = FileAttributes.ReparsePoint
     };
 
-    private static List<ScanFile> ScanDirectory(string path, string stage, CancellationToken cancellationToken)
+    private static List<ScanFile> ScanDirectory(string path, string stage, CancellationToken cancellationToken, Action<long>? onFileFound = null)
     {
         var files = new List<ScanFile>();
         if (!Directory.Exists(path))
@@ -328,7 +353,7 @@ public sealed class CleanerScanService
             var category = DescribeSourceCategory(path, stage);
             var enumerable = new FileSystemEnumerable<ScanFile>(
                 path,
-                (ref FileSystemEntry entry) => new ScanFile(entry.ToFullPath(), entry.Length, category),
+                (ref FileSystemEntry entry) => new ScanFile(entry.ToFullPath(), entry.Length, category, entry.LastWriteTimeUtc.UtcDateTime),
                 ScanEnumerationOptions)
             {
                 ShouldIncludePredicate = (ref FileSystemEntry entry) => !entry.IsDirectory && (entry.Attributes & FileAttributes.ReparsePoint) == 0,
@@ -339,6 +364,7 @@ public sealed class CleanerScanService
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 files.Add(file);
+                onFileFound?.Invoke(file.Bytes);
             }
         }
         catch (UnauthorizedAccessException) { }
@@ -356,7 +382,7 @@ public sealed class CleanerScanService
         var skipped = 0;
         long reclaimed = 0;
         var touchedDirectories = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var ageThresholdUtc = minimumAgeHours > 0 ? DateTime.UtcNow.AddHours(-minimumAgeHours) : DateTime.MaxValue;
+        DateTime? ageThresholdUtc = minimumAgeHours > 0 ? DateTime.UtcNow.AddHours(-minimumAgeHours) : null;
 
         foreach (var file in files)
         {
@@ -365,19 +391,19 @@ public sealed class CleanerScanService
             {
                 var fullPath = Path.GetFullPath(file.Path);
                 var deletionRoot = fullRoots.FirstOrDefault(root => fullPath.StartsWith(root, StringComparison.OrdinalIgnoreCase));
-                if (deletionRoot is null || !File.Exists(fullPath))
+                if (deletionRoot is null)
                 {
                     skipped++;
                     continue;
                 }
 
-                if (minimumAgeHours > 0 && File.GetLastWriteTimeUtc(fullPath) > ageThresholdUtc)
+                if (ageThresholdUtc is { } threshold && file.LastWriteTimeUtc is { } cachedLastWriteUtc && cachedLastWriteUtc > threshold)
                 {
                     skipped++;
                     continue;
                 }
 
-                if (!WindowsSafeDeleteService.TryDelete(fullPath, deletionRoot).Succeeded)
+                if (!WindowsSafeDeleteService.TryDelete(fullPath, deletionRoot, ageThresholdUtc).Succeeded)
                 {
                     skipped++;
                     continue;

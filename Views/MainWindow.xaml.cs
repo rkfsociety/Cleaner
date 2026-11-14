@@ -360,7 +360,7 @@ public partial class MainWindow : Window
             UserTempSubtitle.Text = "Требуется повторная проверка";
             WindowsTempSubtitle.Text = "Требуется повторная проверка";
             RecycleBinSubtitle.Text = "Требуется повторная проверка";
-            await UpdateDiskUsageAsync();
+            await UpdateDiskUsageAsync(forceRefresh: true);
         }
         catch (OperationCanceledException)
         {
@@ -499,7 +499,7 @@ public partial class MainWindow : Window
         }
     }
 
-    private async Task UpdateDiskUsageAsync()
+    private async Task UpdateDiskUsageAsync(bool forceRefresh = false)
     {
         _diskUsageCancellation?.Cancel();
         _diskUsageCancellation?.Dispose();
@@ -507,7 +507,7 @@ public partial class MainWindow : Window
         ShowDiskUsageLoading();
         try
         {
-            var snapshot = await _diskUsageService.ReadAsync(_selectedDriveRoots, _diskUsageCancellation.Token);
+            var snapshot = await _diskUsageService.ReadAsync(_selectedDriveRoots, _diskUsageCancellation.Token, forceRefresh);
             if (snapshot is not null && !_diskUsageCancellation.IsCancellationRequested)
             {
                 RenderDiskUsage(snapshot, updateStatusText: true);

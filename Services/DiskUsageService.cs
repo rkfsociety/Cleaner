@@ -26,16 +26,16 @@ public sealed class DiskUsageService
         ("Данные программ", ["ProgramData"], "#8576FF")
     ];
 
-    public Task<DiskUsageSnapshot?> ReadAsync(IEnumerable<string> driveRoots, CancellationToken cancellationToken = default)
+    public Task<DiskUsageSnapshot?> ReadAsync(IEnumerable<string> driveRoots, CancellationToken cancellationToken = default, bool forceRefresh = false)
     {
         var roots = driveRoots.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
-        return Task.Run(() => ReadCached(roots, cancellationToken), cancellationToken);
+        return Task.Run(() => ReadCached(roots, cancellationToken, forceRefresh), cancellationToken);
     }
 
-    private DiskUsageSnapshot? ReadCached(IReadOnlyList<string> driveRoots, CancellationToken cancellationToken)
+    private DiskUsageSnapshot? ReadCached(IReadOnlyList<string> driveRoots, CancellationToken cancellationToken, bool forceRefresh)
     {
         var signature = TryBuildSignature(driveRoots);
-        if (signature is not null && TryReadCache(signature, out var cached))
+        if (!forceRefresh && signature is not null && TryReadCache(signature, out var cached))
         {
             return cached with { FromCache = true };
         }

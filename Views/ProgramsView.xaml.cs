@@ -4,6 +4,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Threading;
 
 namespace Cleaner;
 
@@ -13,8 +14,10 @@ public partial class ProgramsView : UserControl
     private readonly ProgramUninstallService _uninstallService;
     private readonly ResidualCleanupService _residuals = new();
     private readonly AppDialogHost _dialog;
+    private readonly DispatcherTimer _searchDebounceTimer;
     private IReadOnlyList<InstalledProgram> _programs = [];
     private CancellationTokenSource? _loadCancellation;
+    private CancellationTokenSource? _residualCleanupCancellation;
     private bool _uninstallRunning;
     private bool _hasLoadedOnce;
     private ProgramSortMode _sortMode = ProgramSortMode.LeastRecentlyUsed;
@@ -26,6 +29,12 @@ public partial class ProgramsView : UserControl
         InitializeComponent();
         _dialog = dialog;
         _uninstallService = new ProgramUninstallService(_programsService);
+        _searchDebounceTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(180) };
+        _searchDebounceTimer.Tick += (_, _) =>
+        {
+            _searchDebounceTimer.Stop();
+            ApplyFilters();
+        };
         Loaded += async (_, _) =>
         {
             if (!_hasLoadedOnce)
@@ -33,11 +42,17 @@ public partial class ProgramsView : UserControl
                 await ReloadAsync();
             }
         };
-        Unloaded += (_, _) => _loadCancellation?.Cancel();
+        Unloaded += (_, _) =>
+        {
+            _searchDebounceTimer.Stop();
+            _loadCancellation?.Cancel();
+            _residualCleanupCancellation?.Cancel();
+        };
     }
 
     private async Task ReloadAsync()
     {
+        _searchDebounceTimer.Stop();
         _loadCancellation?.Cancel();
         _loadCancellation?.Dispose();
         _loadCancellation = new CancellationTokenSource();
@@ -134,6 +149,7 @@ public partial class ProgramsView : UserControl
         }
 
         UpdateSortIndicator(header);
+        _searchDebounceTimer.Stop();
         ApplyFilters();
     }
 
@@ -153,7 +169,8 @@ public partial class ProgramsView : UserControl
     {
         if (IsLoaded)
         {
-            ApplyFilters();
+            _searchDebounceTimer.Stop();
+            _searchDebounceTimer.Start();
         }
     }
 
@@ -161,6 +178,7 @@ public partial class ProgramsView : UserControl
     {
         if (IsLoaded)
         {
+            _searchDebounceTimer.Stop();
             ApplyFilters();
         }
     }
@@ -211,6 +229,12 @@ public partial class ProgramsView : UserControl
 
     private async void ScanResidualsButton_Click(object sender, RoutedEventArgs e)
     {
+        if (_residualCleanupCancellation is not null)
+        {
+            _residualCleanupCancellation.Cancel();
+            return;
+        }
+
         var program = SelectedProgram();
         if (program is null || _uninstallRunning)
         {
@@ -329,7 +353,41 @@ public partial class ProgramsView : UserControl
             return;
         }
 
-        var files = _residuals.Delete(outcome.ResidualFiles);
+        var wasRunning = _uninstallRunning;
+        _uninstallRunning = true;
+        UpdateActionButtons();
+        RefreshButton.IsEnabled = false;
+        _residualCleanupCancellation = new CancellationTokenSource();
+        ScanResidualsButton.Content = "Отменить";
+        ScanResidualsButton.IsEnabled = true;
+
+        var progress = new Progress<CleanupProgress>(p =>
+            SummaryText.Text = $"Удаление остатков «{program.Name}»: удалено {p.DeletedFiles:N0} из {outcome.ResidualFiles.Count:N0}, пропущено {p.SkippedFiles:N0} ({ByteSizeFormatter.Format(p.ReclaimedBytes)})...");
+
+        ResidualCleanupResult files;
+        try
+        {
+            files = await _residuals.DeleteAsync(outcome.ResidualFiles, _residualCleanupCancellation.Token, progress);
+        }
+        catch (OperationCanceledException)
+        {
+            AppLogService.Write($"Удаление остатков «{program.Name}» отменено пользователем");
+            await _dialog.ShowMessageAsync("Очистка остатков", "Удаление остатков отменено. Уже удалённые файлы не восстанавливаются.");
+            return;
+        }
+        finally
+        {
+            _residualCleanupCancellation.Dispose();
+            _residualCleanupCancellation = null;
+            ScanResidualsButton.Content = "Найти остатки";
+            _uninstallRunning = wasRunning;
+            if (!wasRunning)
+            {
+                RefreshButton.IsEnabled = true;
+                UpdateActionButtons();
+            }
+        }
+
         var registry = _residuals.DeleteRegistryEntries(outcome.ResidualRegistryEntries);
         AppLogService.Write($"Остатки «{program.Name}»: файлов удалено={files.DeletedFiles}, пропущено={files.SkippedFiles}, байт={files.DeletedBytes}, записей реестра удалено={registry.DeletedEntries}, пропущено={registry.SkippedEntries}");
         var reasons = FormatCleanupReasons(files.SkippedByReason, registry.SkippedByReason);

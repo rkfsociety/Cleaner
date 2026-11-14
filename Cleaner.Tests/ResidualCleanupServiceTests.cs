@@ -61,4 +61,49 @@ public class ResidualCleanupServiceTests
             }
         }
     }
+
+    [Fact]
+    public async Task DeleteAsync_ReportsProgressAndHonorsCancellation()
+    {
+        var root = Directory.CreateTempSubdirectory("cleaner-residual-async-");
+        try
+        {
+            var first = Path.Combine(root.FullName, "first.dat");
+            var second = Path.Combine(root.FullName, "second.dat");
+            File.WriteAllBytes(first, [1, 2]);
+            File.WriteAllBytes(second, [3, 4, 5]);
+
+            var reports = new List<CleanupProgress>();
+            var progress = new SyncProgress<CleanupProgress>(reports.Add);
+            var completed = await new ResidualCleanupService().DeleteAsync(
+                [new ResidualFile(first, 2, root.FullName)],
+                CancellationToken.None,
+                progress);
+
+            Assert.Equal(1, completed.DeletedFiles);
+            Assert.NotEmpty(reports);
+            Assert.Equal(1, reports[^1].DeletedFiles);
+            Assert.Equal(2, reports[^1].ReclaimedBytes);
+
+            using var cts = new CancellationTokenSource();
+            cts.Cancel();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+                new ResidualCleanupService().DeleteAsync(
+                    [new ResidualFile(second, 3, root.FullName)],
+                    cts.Token));
+            Assert.True(File.Exists(second));
+        }
+        finally
+        {
+            if (root.Exists)
+            {
+                root.Delete(true);
+            }
+        }
+    }
+
+    private sealed class SyncProgress<T>(Action<T> report) : IProgress<T>
+    {
+        public void Report(T value) => report(value);
+    }
 }
