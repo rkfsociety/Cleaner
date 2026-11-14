@@ -24,7 +24,8 @@ public partial class MainWindow : Window
     private CancellationTokenSource? _scanCancellation;
     private CancellationTokenSource? _cleanupCancellation;
     private CancellationTokenSource? _diskUsageCancellation;
-    private System.Windows.Shapes.Path? _diskUsageLoadingPath;
+    private RotateTransform? _diskUsageLoadingBaseRotate;
+    private RotateTransform? _diskUsageLoadingSpreadRotate;
     private ScanResult? _lastScan;
     private readonly HashSet<string> _excludedScanPaths = new(StringComparer.OrdinalIgnoreCase);
     private ProgramsView? _programsView;
@@ -59,7 +60,11 @@ public partial class MainWindow : Window
             }
             await UpdateDiskUsageAsync();
         };
-        Unloaded += (_, _) => _diskUsageCancellation?.Cancel();
+        Unloaded += (_, _) =>
+        {
+            _diskUsageCancellation?.Cancel();
+            StopDiskUsageLoading();
+        };
         RestoreLatestActivity();
         ShowHome();
     }
@@ -541,18 +546,67 @@ public partial class MainWindow : Window
         _diskUsageCancellation?.Cancel();
         _diskUsageCancellation?.Dispose();
         _diskUsageCancellation = new CancellationTokenSource();
-        ShowDiskUsageLoading();
+        var token = _diskUsageCancellation.Token;
+
+        var readTask = _diskUsageService.ReadAsync(_selectedDriveRoots, token, forceRefresh);
+        if (!forceRefresh)
+        {
+            await Task.WhenAny(readTask, Task.Delay(120, token));
+        }
+
+        if (token.IsCancellationRequested)
+        {
+            return;
+        }
+
+        if (!readTask.IsCompleted)
+        {
+            ShowDiskUsageLoading();
+        }
+
         try
         {
-            var snapshot = await _diskUsageService.ReadAsync(_selectedDriveRoots, _diskUsageCancellation.Token, forceRefresh);
-            if (snapshot is not null && !_diskUsageCancellation.IsCancellationRequested)
+            var snapshot = await readTask;
+            if (token.IsCancellationRequested)
+            {
+                return;
+            }
+
+            if (snapshot is not null)
             {
                 RenderDiskUsage(snapshot, updateStatusText: true);
+            }
+            else
+            {
+                ResetDiskUsageTrack();
+                DiskLegendPanel.Children.Clear();
+                UpdateFreeSpaceIndicator();
             }
         }
         catch (OperationCanceledException)
         {
         }
+    }
+
+    private void StopDiskUsageLoading()
+    {
+        _diskUsageLoadingBaseRotate?.BeginAnimation(RotateTransform.AngleProperty, null);
+        _diskUsageLoadingSpreadRotate?.BeginAnimation(RotateTransform.AngleProperty, null);
+        _diskUsageLoadingBaseRotate = null;
+        _diskUsageLoadingSpreadRotate = null;
+    }
+
+    private void ResetDiskUsageTrack()
+    {
+        StopDiskUsageLoading();
+        DiskUsageRing.Children.Clear();
+        DiskUsageRing.Children.Add(new System.Windows.Shapes.Ellipse
+        {
+            Width = 145,
+            Height = 145,
+            Stroke = (Brush)FindResource("Line"),
+            StrokeThickness = 12
+        });
     }
 
     private void ShowDiskUsageLoading()
@@ -580,19 +634,60 @@ public partial class MainWindow : Window
             Margin = new Thickness(0, 4, 0, 0)
         });
 
-        _diskUsageLoadingPath = new System.Windows.Shapes.Path
+        ResetDiskUsageTrack();
+
+        const double center = 72.5;
+        const double radius = 66.5;
+        const double arcSweep = 85;
+        var accentBrush = (Brush)FindResource("Purple");
+        var arcGeometry = CreateArc(center, radius, -90, arcSweep);
+
+        _diskUsageLoadingBaseRotate = new RotateTransform { CenterX = center, CenterY = center };
+        _diskUsageLoadingSpreadRotate = new RotateTransform { CenterX = center, CenterY = center };
+
+        var spinnerLayer = new Canvas
         {
-            Stroke = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#6C5CE7")),
-            StrokeThickness = 12,
-            Data = CreateArc(72.5, 66.5, -90, 70),
-            RenderTransform = new RotateTransform { CenterX = 72.5, CenterY = 72.5 }
+            Width = 145,
+            Height = 145,
+            RenderTransform = _diskUsageLoadingBaseRotate
         };
-        DiskUsageRing.Children.Add(_diskUsageLoadingPath);
-        var animation = new DoubleAnimation(0, 360, new Duration(TimeSpan.FromMilliseconds(900)))
+
+        var baseArc = new System.Windows.Shapes.Path
+        {
+            Stroke = accentBrush,
+            StrokeThickness = 12,
+            StrokeStartLineCap = PenLineCap.Round,
+            StrokeEndLineCap = PenLineCap.Round,
+            Data = arcGeometry
+        };
+
+        var spreadArc = new System.Windows.Shapes.Path
+        {
+            Stroke = accentBrush,
+            StrokeThickness = 12,
+            StrokeStartLineCap = PenLineCap.Round,
+            StrokeEndLineCap = PenLineCap.Round,
+            Data = arcGeometry,
+            RenderTransform = _diskUsageLoadingSpreadRotate
+        };
+
+        spinnerLayer.Children.Add(baseArc);
+        spinnerLayer.Children.Add(spreadArc);
+        DiskUsageRing.Children.Add(spinnerLayer);
+
+        var baseAnimation = new DoubleAnimation(0, 360, new Duration(TimeSpan.FromMilliseconds(1050)))
         {
             RepeatBehavior = RepeatBehavior.Forever
         };
-        ((RotateTransform)_diskUsageLoadingPath.RenderTransform).BeginAnimation(RotateTransform.AngleProperty, animation);
+        var spreadAnimation = new DoubleAnimation(0, 75, new Duration(TimeSpan.FromMilliseconds(675)))
+        {
+            AutoReverse = true,
+            RepeatBehavior = RepeatBehavior.Forever,
+            EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut }
+        };
+
+        _diskUsageLoadingBaseRotate.BeginAnimation(RotateTransform.AngleProperty, baseAnimation);
+        _diskUsageLoadingSpreadRotate.BeginAnimation(RotateTransform.AngleProperty, spreadAnimation);
     }
 
     private void RenderDiskUsage(DiskUsageSnapshot snapshot, bool updateStatusText = false)
@@ -615,8 +710,7 @@ public partial class MainWindow : Window
             }
         }
 
-        DiskUsageRing.Children.Clear();
-        DiskUsageRing.Children.Add(new System.Windows.Shapes.Ellipse { Width = 145, Height = 145, Stroke = (Brush)FindResource("Line"), StrokeThickness = 12 });
+        ResetDiskUsageTrack();
         const double center = 72.5;
         const double radius = 66.5;
         var angle = -90d;

@@ -184,7 +184,7 @@
                                         </Grid.ColumnDefinitions>
                                         <Grid Grid.Column="0" Width="145" Height="145" VerticalAlignment="Center">
                                             <Canvas x:Name="DiskUsageRing" Width="145" Height="145">
-                                                <Ellipse Width="145" Height="145" Stroke="{StaticResource Line}" StrokeThickness="13" />
+                                                <Ellipse Width="145" Height="145" Stroke="{StaticResource Line}" StrokeThickness="12" />
                                             </Canvas>
                                             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
                                                 <TextBlock x:Name="FreeSpaceText" Text="—" Foreground="{StaticResource Ink}" FontSize="24" FontWeight="Bold" HorizontalAlignment="Center" />
