@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Windows;
@@ -57,11 +58,6 @@ public partial class MainWindow : Window
         Unloaded += (_, _) => _diskUsageCancellation?.Cancel();
         RestoreLatestActivity();
         ShowHome();
-        if (App.IsSystemCleanupSession)
-        {
-            StatusText.Text = "Повышенная очистка";
-            StatusDetails.Text = "Приложение запущено с правами администратора — доступны все категории";
-        }
     }
 
     /// <summary>Единственное окно приложения: все разделы и диалоги показываются внутри него.</summary>
@@ -273,20 +269,6 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (deleteWindowsTemp && !App.IsAdministrator)
-        {
-            var elevation = await Dialog.ConfirmAsync(
-                "Нужны права администратора",
-                "Для системного Temp нужна отдельная повышенная сессия. Cleaner перезапустится с правами администратора; после запуска повторите проверку и выберите нужные категории.",
-                "Перезапустить");
-            if (elevation && !App.RestartForSystemCleanup())
-            {
-                await Dialog.ShowMessageAsync("Cleaner", "Не удалось получить права администратора. Системные файлы останутся без изменений.");
-            }
-
-            return;
-        }
-
         if (deleteRecycleBin)
         {
             var currentRecycleBin = await Task.Run(() => _scanService.GetRecycleBinInfo(_selectedDriveRoots));
@@ -307,9 +289,7 @@ public partial class MainWindow : Window
         var selectedBytes = userSelectedBytes +
             windowsSelectedBytes +
             (deleteRecycleBin ? _lastScan.RecycleBin.Bytes : 0);
-        var runningBrowsers = new[] { "chrome", "msedge", "firefox", "brave", "vivaldi", "browser", "opera" }
-            .Where(name => Process.GetProcessesByName(name).Length > 0)
-            .ToArray();
+        var runningBrowsers = GetRunningBrowserNames();
         var browserWarning = runningBrowsers.Length > 0
             ? $"\n\nЗапущены: {string.Join(", ", runningBrowsers)}. Их занятые файлы кэша будут пропущены."
             : string.Empty;
@@ -682,5 +662,62 @@ public partial class MainWindow : Window
         ActivityText.Text = $"Последняя очистка: {latest.Timestamp.LocalDateTime:g}";
         ActivityResultText.Text = $"Удалено файлов: {latest.DeletedFiles:N0}";
         ActivitySizeText.Text = $"{latest.Scope} · освобождено {FormatBytes(latest.ReclaimedBytes)}";
+    }
+
+    private static string[] GetRunningBrowserNames()
+    {
+        var running = new List<string>();
+        foreach (var name in new[] { "chrome", "msedge", "firefox", "brave", "vivaldi", "opera" })
+        {
+            var processes = Process.GetProcessesByName(name);
+            try
+            {
+                if (processes.Length > 0)
+                {
+                    running.Add(name);
+                }
+            }
+            finally
+            {
+                foreach (var process in processes)
+                {
+                    process.Dispose();
+                }
+            }
+        }
+
+        var browserProcesses = Process.GetProcessesByName("browser");
+        try
+        {
+            foreach (var process in browserProcesses)
+            {
+                try
+                {
+                    if (IsYandexBrowserExecutablePath(process.MainModule?.FileName))
+                    {
+                        running.Add("YandexBrowser");
+                        break;
+                    }
+                }
+                catch (Win32Exception) { }
+                catch (InvalidOperationException) { }
+                catch (NotSupportedException) { }
+            }
+        }
+        finally
+        {
+            foreach (var process in browserProcesses)
+            {
+                process.Dispose();
+            }
+        }
+
+        return running.ToArray();
+    }
+
+    internal static bool IsYandexBrowserExecutablePath(string? executablePath)
+    {
+        return !string.IsNullOrWhiteSpace(executablePath) &&
+            executablePath.Contains(@"\Yandex\YandexBrowser\", StringComparison.OrdinalIgnoreCase);
     }
 }

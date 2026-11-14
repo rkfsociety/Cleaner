@@ -266,6 +266,31 @@ public class CleanerScanServiceTests
         Assert.True(File.Exists(filePath));
     }
 
+    [Fact]
+    public void ScanDirectory_UsesExplicitRootCategory_EvenWhenPathContainsBrowserOrAppNames()
+    {
+        using var scope = new TempScope();
+        var root = scope.CreateSubdirectory("Chrome");
+        var nested = Path.Combine(root, "Code", "Opera");
+        Directory.CreateDirectory(nested);
+        File.WriteAllBytes(Path.Combine(nested, "temp.tmp"), [1, 2, 3]);
+
+        var files = CleanerScanService.ScanDirectory(root, "Временные файлы и кэш пользователя", CancellationToken.None);
+
+        var scanned = Assert.Single(files);
+        Assert.Equal("Временные файлы и кэш пользователя", scanned.Category);
+    }
+
+    [Theory]
+    [InlineData(@"C:\Users\roman\AppData\Local\Yandex\YandexBrowser\Application\browser.exe", true)]
+    [InlineData(@"C:\Program Files (x86)\Yandex\YandexBrowser\Application\browser.exe", true)]
+    [InlineData(@"C:\Program Files\SomeOtherApp\browser.exe", false)]
+    [InlineData(null, false)]
+    public void IsYandexBrowserExecutablePath_DistinguishesYandexFromGenericBrowserExe(string? path, bool expected)
+    {
+        Assert.Equal(expected, MainWindow.IsYandexBrowserExecutablePath(path));
+    }
+
     private sealed class TempScope : IDisposable
     {
         private readonly string _root = Path.Combine(Path.GetTempPath(), $"cleaner-test-{Guid.NewGuid():N}");

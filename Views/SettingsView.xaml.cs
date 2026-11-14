@@ -94,6 +94,12 @@ public partial class SettingsView : UserControl
 
             Application.Current.Shutdown();
         }
+        catch (UpdateException exception)
+        {
+            AppLogService.Write("Не удалось проверить или установить обновление Cleaner", exception);
+            UpdateStatusText.Text = exception.Message;
+            await _dialog.ShowMessageAsync("Обновление Cleaner", exception.Message);
+        }
         catch (Exception exception)
         {
             AppLogService.Write("Не удалось проверить или установить обновление Cleaner", exception);

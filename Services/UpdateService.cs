@@ -58,38 +58,107 @@ public sealed record UpdateAsset(Uri DownloadUri);
 
 public sealed record CleanerRelease(CleanerVersion Version, string TagName, UpdateAsset Executable, UpdateAsset Checksum);
 
+public sealed class UpdateException : Exception
+{
+    public UpdateException(string message) : base(message)
+    {
+    }
+
+    public UpdateException(string message, Exception innerException) : base(message, innerException)
+    {
+    }
+}
+
 public sealed class UpdateService
 {
     private const string Owner = "rkfsociety";
     private const string Repository = "Cleaner";
+    private static readonly TimeSpan DefaultApiTimeout = TimeSpan.FromSeconds(15);
     private static readonly HttpClient Client = new();
     private static readonly Uri LatestReleaseUri = new($"https://api.github.com/repos/{Owner}/{Repository}/releases/latest");
+    private readonly HttpClient _client;
+    private readonly TimeSpan _apiTimeout;
+
+    public UpdateService() : this(Client, DefaultApiTimeout)
+    {
+    }
+
+    internal UpdateService(HttpClient client, TimeSpan? apiTimeout = null)
+    {
+        _client = client;
+        _apiTimeout = apiTimeout ?? DefaultApiTimeout;
+    }
 
     public async Task<CleanerRelease?> GetLatestReleaseAsync(CancellationToken cancellationToken = default)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Get, LatestReleaseUri);
-        request.Headers.UserAgent.ParseAdd("Cleaner-Updater/1.0");
-        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
-        using var response = await Client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
-        if (response.StatusCode == HttpStatusCode.NotFound)
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(_apiTimeout);
+        var requestToken = timeout.Token;
+
+        try
         {
-            return null;
+            using var request = new HttpRequestMessage(HttpMethod.Get, LatestReleaseUri);
+            request.Headers.UserAgent.ParseAdd("Cleaner-Updater/1.0");
+            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
+            using var response = await _client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, requestToken);
+            if (response.StatusCode == HttpStatusCode.NotFound)
+            {
+                return null;
+            }
+
+            if (response.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.TooManyRequests)
+            {
+                if (IsRateLimitResponse(response))
+                {
+                    throw new UpdateException("Превышен лимит запросов к GitHub API. Повторите проверку обновлений позже.");
+                }
+
+                throw new UpdateException($"Доступ к GitHub API временно ограничен (HTTP {(int)response.StatusCode}). Повторите попытку позже.");
+            }
+
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new UpdateException($"Сервер GitHub вернул ошибку {(int)response.StatusCode}. Повторите проверку обновлений позже.");
+            }
+
+            await using var stream = await response.Content.ReadAsStreamAsync(requestToken);
+            using var document = await JsonDocument.ParseAsync(stream, cancellationToken: requestToken);
+            var root = document.RootElement;
+            var tagName = root.GetProperty("tag_name").GetString();
+            if (!CleanerVersion.TryParseTag(tagName, out var version))
+            {
+                throw new InvalidDataException("Последний релиз Cleaner содержит некорректный номер версии.");
+            }
+
+            var assets = root.GetProperty("assets").EnumerateArray().ToArray();
+            var executable = FindAsset(assets, "Cleaner.exe");
+            var checksum = FindAsset(assets, "Cleaner.exe.sha256");
+            return new CleanerRelease(version, tagName!, executable, checksum);
+        }
+        catch (OperationCanceledException exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            throw new UpdateException("Превышено время ожидания ответа от GitHub. Проверьте подключение к интернету и повторите попытку.", exception);
+        }
+        catch (HttpRequestException exception)
+        {
+            throw new UpdateException("Не удалось подключиться к GitHub. Проверьте подключение к интернету.", exception);
+        }
+    }
+
+    private static bool IsRateLimitResponse(HttpResponseMessage response)
+    {
+        if (response.StatusCode == HttpStatusCode.TooManyRequests)
+        {
+            return true;
         }
 
-        response.EnsureSuccessStatusCode();
-        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-        using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
-        var root = document.RootElement;
-        var tagName = root.GetProperty("tag_name").GetString();
-        if (!CleanerVersion.TryParseTag(tagName, out var version))
+        if (response.Headers.RetryAfter is not null)
         {
-            throw new InvalidDataException("Последний релиз Cleaner содержит некорректный номер версии.");
+            return true;
         }
 
-        var assets = root.GetProperty("assets").EnumerateArray().ToArray();
-        var executable = FindAsset(assets, "Cleaner.exe");
-        var checksum = FindAsset(assets, "Cleaner.exe.sha256");
-        return new CleanerRelease(version, tagName!, executable, checksum);
+        return response.Headers.TryGetValues("X-RateLimit-Remaining", out var remaining) &&
+            remaining.Any(value => string.Equals(value.Trim(), "0", StringComparison.Ordinal));
     }
 
     public async Task<string> DownloadAndVerifyAsync(

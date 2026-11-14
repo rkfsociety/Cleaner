@@ -5,6 +5,7 @@ using System.IO.Enumeration;
 namespace Cleaner;
 
 public sealed record ScanFile(string Path, long Bytes, string Category = "", DateTime? LastWriteTimeUtc = null);
+internal sealed record ScanRoot(string Path, string Category);
 public sealed record CleanupResult(int DeletedFiles, int SkippedFiles, long ReclaimedBytes);
 public sealed record ScanProgress(string Stage, int FilesFound, long BytesFound);
 public sealed record CleanupProgress(string Stage, int DeletedFiles, int SkippedFiles, long ReclaimedBytes);
@@ -40,8 +41,8 @@ public sealed class CleanerScanService
         return Task.Run(() =>
         {
             var drives = NormalizeDrives(selectedDrives);
-            var userTemp = ScanMany(BuildUserCleanupRoots(drives), "Временные файлы и кэш пользователя", cancellationToken, progress);
-            var windowsTemp = ScanMany(BuildWindowsTempRoots(drives), "Системные временные файлы", cancellationToken, progress);
+            var userTemp = ScanMany(BuildUserCleanupCategorizedRoots(drives), "Временные файлы и кэш пользователя", cancellationToken, progress);
+            var windowsTemp = ScanMany(BuildWindowsTempCategorizedRoots(drives), "Системные временные файлы", cancellationToken, progress);
             progress?.Report(new ScanProgress("Корзина", userTemp.Count + windowsTemp.Count, userTemp.Sum(file => file.Bytes) + windowsTemp.Sum(file => file.Bytes)));
             return new ScanResult(userTemp, windowsTemp, GetRecycleBinInfo(drives), DateTimeOffset.Now);
         }, cancellationToken);
@@ -121,7 +122,10 @@ public sealed class CleanerScanService
             .ToArray();
     }
 
-    internal static IReadOnlyList<string> BuildWindowsTempRoots(IEnumerable<string> drives)
+    internal static IReadOnlyList<string> BuildWindowsTempRoots(IEnumerable<string> drives) =>
+        BuildWindowsTempCategorizedRoots(drives).Select(root => root.Path).ToArray();
+
+    internal static IReadOnlyList<ScanRoot> BuildWindowsTempCategorizedRoots(IEnumerable<string> drives)
     {
         var windowsFolder = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
         var windowsRoot = Path.GetPathRoot(windowsFolder);
@@ -131,44 +135,50 @@ public sealed class CleanerScanService
         }
 
         var commonAppData = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
-        var candidates = new[]
+        var candidates = new ScanRoot[]
         {
-            Path.Combine(windowsFolder, "Temp"),
-            Path.Combine(windowsFolder, "Minidump"),
-            Path.Combine(windowsFolder, "SoftwareDistribution", "Download"),
-            Path.Combine(commonAppData, "Microsoft", "Windows", "WER", "ReportArchive"),
-            Path.Combine(commonAppData, "Microsoft", "Windows", "WER", "ReportQueue"),
-            Path.Combine(commonAppData, "Microsoft", "Windows", "WER", "Temp")
+            new(Path.Combine(windowsFolder, "Temp"), "Системные временные файлы"),
+            new(Path.Combine(windowsFolder, "Minidump"), "Дампы сбоев"),
+            new(Path.Combine(windowsFolder, "SoftwareDistribution", "Download"), "Кэш обновлений Windows"),
+            new(Path.Combine(commonAppData, "Microsoft", "Windows", "WER", "ReportArchive"), "Отчёты об ошибках WER"),
+            new(Path.Combine(commonAppData, "Microsoft", "Windows", "WER", "ReportQueue"), "Отчёты об ошибках WER"),
+            new(Path.Combine(commonAppData, "Microsoft", "Windows", "WER", "Temp"), "Отчёты об ошибках WER")
         };
 
-        return candidates.Where(Directory.Exists).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        return candidates
+            .Where(root => Directory.Exists(root.Path))
+            .DistinctBy(root => root.Path, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
     }
 
-    internal static IReadOnlyList<string> BuildUserCleanupRoots(IEnumerable<string> drives)
+    internal static IReadOnlyList<string> BuildUserCleanupRoots(IEnumerable<string> drives) =>
+        BuildUserCleanupCategorizedRoots(drives).Select(root => root.Path).ToArray();
+
+    internal static IReadOnlyList<ScanRoot> BuildUserCleanupCategorizedRoots(IEnumerable<string> drives)
     {
-        var roots = new List<string>();
+        var roots = new List<ScanRoot>();
         if (IsOnSelectedDrive(Path.GetTempPath(), drives))
         {
-            roots.Add(Path.GetTempPath());
+            roots.Add(new ScanRoot(Path.GetTempPath(), "Временные файлы и кэш пользователя"));
             roots.AddRange(BuildUserDiagnosticAndCacheRoots());
             roots.AddRange(BuildBrowserCacheRoots());
         }
 
-        return roots.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        return roots.DistinctBy(root => root.Path, StringComparer.OrdinalIgnoreCase).ToArray();
     }
 
-    private static IReadOnlyList<string> BuildUserDiagnosticAndCacheRoots()
+    private static IReadOnlyList<ScanRoot> BuildUserDiagnosticAndCacheRoots()
     {
         var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-        var candidates = new List<string>
+        var candidates = new List<ScanRoot>
         {
-            Path.Combine(localAppData, "CrashDumps"),
-            Path.Combine(localAppData, "D3DSCache"),
-            Path.Combine(localAppData, "Microsoft", "Windows", "INetCache"),
-            Path.Combine(localAppData, "Microsoft", "Windows", "WER", "ReportArchive"),
-            Path.Combine(localAppData, "Microsoft", "Windows", "WER", "ReportQueue"),
-            Path.Combine(localAppData, "Microsoft", "Windows", "WER", "Temp")
+            new(Path.Combine(localAppData, "CrashDumps"), "Дампы сбоев"),
+            new(Path.Combine(localAppData, "D3DSCache"), "Кэш DirectX шейдеров"),
+            new(Path.Combine(localAppData, "Microsoft", "Windows", "INetCache"), "Временный веб-кэш Windows"),
+            new(Path.Combine(localAppData, "Microsoft", "Windows", "WER", "ReportArchive"), "Отчёты об ошибках WER"),
+            new(Path.Combine(localAppData, "Microsoft", "Windows", "WER", "ReportQueue"), "Отчёты об ошибках WER"),
+            new(Path.Combine(localAppData, "Microsoft", "Windows", "WER", "Temp"), "Отчёты об ошибках WER")
         };
 
         var appCacheFolders = new[]
@@ -180,29 +190,29 @@ public sealed class CleanerScanService
 
         foreach (var appRoot in appCacheFolders)
         {
-            candidates.Add(Path.Combine(appRoot, "Cache", "Cache_Data"));
-            candidates.Add(Path.Combine(appRoot, "Code Cache"));
-            candidates.Add(Path.Combine(appRoot, "GPUCache"));
+            candidates.Add(new ScanRoot(Path.Combine(appRoot, "Cache", "Cache_Data"), "Кэш приложений"));
+            candidates.Add(new ScanRoot(Path.Combine(appRoot, "Code Cache"), "Кэш приложений"));
+            candidates.Add(new ScanRoot(Path.Combine(appRoot, "GPUCache"), "Кэш приложений"));
         }
 
-        return candidates.Where(Directory.Exists).ToArray();
+        return candidates.Where(root => Directory.Exists(root.Path)).ToArray();
     }
 
-    private static IReadOnlyList<string> BuildBrowserCacheRoots()
+    private static IReadOnlyList<ScanRoot> BuildBrowserCacheRoots()
     {
-        var roots = new List<string>();
+        var roots = new List<ScanRoot>();
         var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-        var chromiumUserDataRoots = new[]
+        var chromiumUserDataRoots = new (string Path, string Category)[]
         {
-            Path.Combine(localAppData, "Google", "Chrome", "User Data"),
-            Path.Combine(localAppData, "Microsoft", "Edge", "User Data"),
-            Path.Combine(localAppData, "BraveSoftware", "Brave-Browser", "User Data"),
-            Path.Combine(localAppData, "Vivaldi", "User Data"),
-            Path.Combine(localAppData, "Yandex", "YandexBrowser", "User Data")
+            (Path.Combine(localAppData, "Google", "Chrome", "User Data"), "Кэш Chrome"),
+            (Path.Combine(localAppData, "Microsoft", "Edge", "User Data"), "Кэш Edge"),
+            (Path.Combine(localAppData, "BraveSoftware", "Brave-Browser", "User Data"), "Кэш Brave"),
+            (Path.Combine(localAppData, "Vivaldi", "User Data"), "Кэш Vivaldi"),
+            (Path.Combine(localAppData, "Yandex", "YandexBrowser", "User Data"), "Кэш Яндекс Браузера")
         };
 
-        foreach (var browserRoot in chromiumUserDataRoots.Where(Directory.Exists))
+        foreach (var (browserRoot, category) in chromiumUserDataRoots.Where(entry => Directory.Exists(entry.Path)))
         {
             try
             {
@@ -213,7 +223,9 @@ public sealed class CleanerScanService
                         Path.Combine(profile, "Cache", "Cache_Data"),
                         Path.Combine(profile, "Code Cache"),
                         Path.Combine(profile, "GPUCache")
-                    }.Where(Directory.Exists));
+                    }
+                    .Where(Directory.Exists)
+                    .Select(path => new ScanRoot(path, category)));
                 }
             }
             catch (UnauthorizedAccessException) { }
@@ -235,7 +247,9 @@ public sealed class CleanerScanService
                 Path.Combine(operaRoot, "Cache", "Cache_Data"),
                 Path.Combine(operaRoot, "Code Cache"),
                 Path.Combine(operaRoot, "GPUCache")
-            }.Where(Directory.Exists));
+            }
+            .Where(Directory.Exists)
+            .Select(path => new ScanRoot(path, "Кэш Opera")));
         }
 
         var firefoxProfiles = Path.Combine(localAppData, "Mozilla", "Firefox", "Profiles");
@@ -248,7 +262,7 @@ public sealed class CleanerScanService
                     var cache = Path.Combine(profile, "cache2", "entries");
                     if (Directory.Exists(cache))
                     {
-                        roots.Add(cache);
+                        roots.Add(new ScanRoot(cache, "Кэш Firefox"));
                     }
                 }
             }
@@ -265,28 +279,10 @@ public sealed class CleanerScanService
         return root is not null && drives.Contains(root, StringComparer.OrdinalIgnoreCase);
     }
 
-    internal static string DescribeSourceCategory(string path, string fallbackStage)
+    private static List<ScanFile> ScanMany(IEnumerable<ScanRoot> roots, string stage, CancellationToken cancellationToken, IProgress<ScanProgress>? progress)
     {
-        if (path.Contains("Chrome", StringComparison.OrdinalIgnoreCase)) return "Кэш Chrome";
-        if (path.Contains("Edge", StringComparison.OrdinalIgnoreCase)) return "Кэш Edge";
-        if (path.Contains("Brave", StringComparison.OrdinalIgnoreCase)) return "Кэш Brave";
-        if (path.Contains("Vivaldi", StringComparison.OrdinalIgnoreCase)) return "Кэш Vivaldi";
-        if (path.Contains("YandexBrowser", StringComparison.OrdinalIgnoreCase)) return "Кэш Яндекс Браузера";
-        if (path.Contains("Opera", StringComparison.OrdinalIgnoreCase)) return "Кэш Opera";
-        if (path.Contains("Firefox", StringComparison.OrdinalIgnoreCase)) return "Кэш Firefox";
-        if (path.Contains("CrashDumps", StringComparison.OrdinalIgnoreCase) || path.Contains("Minidump", StringComparison.OrdinalIgnoreCase)) return "Дампы сбоев";
-        if (path.Contains("\\WER\\", StringComparison.OrdinalIgnoreCase)) return "Отчёты об ошибках WER";
-        if (path.Contains("SoftwareDistribution\\Download", StringComparison.OrdinalIgnoreCase)) return "Кэш обновлений Windows";
-        if (path.Contains("D3DSCache", StringComparison.OrdinalIgnoreCase)) return "Кэш DirectX шейдеров";
-        if (path.Contains("INetCache", StringComparison.OrdinalIgnoreCase)) return "Временный веб-кэш Windows";
-        if (path.Contains("\\Code\\", StringComparison.OrdinalIgnoreCase) || path.Contains("\\discord\\", StringComparison.OrdinalIgnoreCase) || path.Contains("\\Slack\\", StringComparison.OrdinalIgnoreCase)) return "Кэш приложений";
-        return fallbackStage;
-    }
-
-    private static List<ScanFile> ScanMany(IEnumerable<string> paths, string stage, CancellationToken cancellationToken, IProgress<ScanProgress>? progress)
-    {
-        var pathList = paths as IReadOnlyList<string> ?? paths.ToArray();
-        if (pathList.Count == 0)
+        var rootList = roots as IReadOnlyList<ScanRoot> ?? roots.ToArray();
+        if (rootList.Count == 0)
         {
             return [];
         }
@@ -300,9 +296,9 @@ public sealed class CleanerScanService
             CancellationToken = cancellationToken
         };
 
-        Parallel.ForEach(pathList, options, path =>
+        Parallel.ForEach(rootList, options, root =>
         {
-            var localFiles = ScanDirectory(path, stage, cancellationToken, bytes =>
+            var localFiles = ScanDirectory(root.Path, root.Category, cancellationToken, bytes =>
             {
                 var filesCount = Interlocked.Increment(ref totalFiles);
                 var bytesCount = Interlocked.Add(ref totalBytes, bytes);
@@ -335,7 +331,7 @@ public sealed class CleanerScanService
         AttributesToSkip = FileAttributes.ReparsePoint
     };
 
-    private static List<ScanFile> ScanDirectory(string path, string stage, CancellationToken cancellationToken, Action<long>? onFileFound = null)
+    internal static List<ScanFile> ScanDirectory(string path, string category, CancellationToken cancellationToken, Action<long>? onFileFound = null)
     {
         var files = new List<ScanFile>();
         if (!Directory.Exists(path))
@@ -350,7 +346,6 @@ public sealed class CleanerScanService
                 return files;
             }
 
-            var category = DescribeSourceCategory(path, stage);
             var enumerable = new FileSystemEnumerable<ScanFile>(
                 path,
                 (ref FileSystemEntry entry) => new ScanFile(entry.ToFullPath(), entry.Length, category, entry.LastWriteTimeUtc.UtcDateTime),
