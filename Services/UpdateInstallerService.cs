@@ -19,7 +19,24 @@ public sealed class UpdateInstallerService
     public string CurrentExecutablePath => Environment.ProcessPath
         ?? throw new InvalidOperationException("Не удалось определить путь запущенного Cleaner.exe.");
 
-    public bool IsInstalled => PathsEqual(CurrentExecutablePath, TargetExecutablePath);
+    public bool IsInnoInstalled => IsInnoInstalledAt(CurrentExecutablePath);
+
+    public bool IsInstalled => IsInnoInstalled || PathsEqual(CurrentExecutablePath, TargetExecutablePath);
+
+    internal static bool IsInnoInstalledAt(string executablePath)
+    {
+        try
+        {
+            var directory = Path.GetDirectoryName(Path.GetFullPath(executablePath));
+            return !string.IsNullOrEmpty(directory) &&
+                File.Exists(Path.Combine(directory, "unins000.exe")) &&
+                File.Exists(Path.Combine(directory, "unins000.dat"));
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
+    }
 
     public bool CanInstallCurrentExecutable =>
         !IsInstalled &&
@@ -113,6 +130,66 @@ public sealed class UpdateInstallerService
             DeleteHelperDirectory(helperDirectory);
             throw;
         }
+    }
+
+    public void StartInstallerUpdate(string stagedInstallerPath)
+    {
+        var installerPath = Path.GetFullPath(stagedInstallerPath);
+        if (!File.Exists(installerPath))
+        {
+            throw new FileNotFoundException("Не найден подготовленный установщик Cleaner-Setup.exe.", installerPath);
+        }
+
+        var stagingRoot = Path.GetFullPath(Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), ProductDirectory, "updates"));
+        if (!installerPath.StartsWith(stagingRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("Файл установщика находится вне временной папки обновлений Cleaner.");
+        }
+
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = installerPath,
+            UseShellExecute = true
+        };
+        foreach (var argument in new[] { "/SP-", "/SILENT", "/SUPPRESSMSGBOXES", "/CLOSEAPPLICATIONS", "/relaunch=1" })
+        {
+            startInfo.ArgumentList.Add(argument);
+        }
+
+        _ = Process.Start(startInfo)
+            ?? throw new InvalidOperationException("Не удалось запустить установщик обновления Cleaner.");
+    }
+
+    public void CleanupStaleUpdates()
+    {
+        try
+        {
+            var updatesRoot = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                ProductDirectory,
+                "updates");
+            if (!Directory.Exists(updatesRoot))
+            {
+                return;
+            }
+
+            var cutoff = DateTime.UtcNow.AddMinutes(-10);
+            foreach (var directory in Directory.GetDirectories(updatesRoot))
+            {
+                try
+                {
+                    if (Directory.GetCreationTimeUtc(directory) < cutoff)
+                    {
+                        Directory.Delete(directory, recursive: true);
+                    }
+                }
+                catch (IOException) { }
+                catch (UnauthorizedAccessException) { }
+            }
+        }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
     }
 
     public void DeleteStagedExecutable(string stagedExecutablePath)

@@ -53,6 +53,7 @@ public partial class MainWindow : Window
         UpdateFreeSpaceIndicator();
         Loaded += async (_, _) =>
         {
+            _updateInstallerService.CleanupStaleUpdates();
             var updateFailure = _updateInstallerService.ConsumeInstallFailure();
             if (updateFailure is not null)
             {

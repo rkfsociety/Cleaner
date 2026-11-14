@@ -52,18 +52,40 @@ jobs:
       - name: Publish portable executable
         run: ./scripts/publish-windows.ps1
 
-      - name: Verify published executable
+      - name: Ensure Inno Setup
+        shell: pwsh
+        run: |
+          $iscc = Get-Command iscc -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source
+          if (-not $iscc) {
+              $candidates = @(
+                  "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
+                  "$env:ProgramFiles\Inno Setup 6\ISCC.exe"
+              )
+              $iscc = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+          }
+          if (-not $iscc) {
+              choco install innosetup -y --no-progress
+              if ($LASTEXITCODE -ne 0) { throw "Failed to install Inno Setup" }
+          }
+
+      - name: Build Inno Setup installer
+        shell: pwsh
+        run: ./scripts/build-installer.ps1 -SkipPublish
+
+      - name: Verify published artifacts
         shell: pwsh
         run: |
           if (!(Test-Path publish/win-x64/Cleaner.exe)) { throw "Cleaner.exe was not published" }
+          if (!(Test-Path publish/installer/Cleaner-Setup.exe)) { throw "Cleaner-Setup.exe was not built" }
 
-      - name: Create SHA-256 file
+      - name: Create SHA-256 files
         if: github.event_name == 'push'
         shell: pwsh
         run: |
-          $executable = "publish/win-x64/Cleaner.exe"
-          $checksum = (Get-FileHash -LiteralPath $executable -Algorithm SHA256).Hash.ToLowerInvariant()
-          [System.IO.File]::WriteAllText("$executable.sha256", $checksum, [System.Text.Encoding]::ASCII)
+          foreach ($artifact in @("publish/win-x64/Cleaner.exe", "publish/installer/Cleaner-Setup.exe")) {
+              $checksum = (Get-FileHash -LiteralPath $artifact -Algorithm SHA256).Hash.ToLowerInvariant()
+              [System.IO.File]::WriteAllText("$artifact.sha256", $checksum, [System.Text.Encoding]::ASCII)
+          }
 
       - name: Upload release files
         if: github.event_name == 'push'
@@ -73,6 +95,8 @@ jobs:
           path: |
             publish/win-x64/Cleaner.exe
             publish/win-x64/Cleaner.exe.sha256
+            publish/installer/Cleaner-Setup.exe
+            publish/installer/Cleaner-Setup.exe.sha256
           if-no-files-found: error
           retention-days: 3
 
@@ -154,7 +178,9 @@ jobs:
             try {
               const requiredAssets = [
                 { name: 'Cleaner.exe', path: 'release-files/Cleaner.exe' },
-                { name: 'Cleaner.exe.sha256', path: 'release-files/Cleaner.exe.sha256' }
+                { name: 'Cleaner.exe.sha256', path: 'release-files/Cleaner.exe.sha256' },
+                { name: 'Cleaner-Setup.exe', path: 'release-files/Cleaner-Setup.exe' },
+                { name: 'Cleaner-Setup.exe.sha256', path: 'release-files/Cleaner-Setup.exe.sha256' }
               ];
               for (const asset of requiredAssets) {
                 if (release.assets.some(existing => existing.name === asset.name)) continue;

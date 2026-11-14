@@ -1,5 +1,7 @@
+using System.IO;
 using System.Net;
 using System.Net.Http;
+using System.Text;
 using Cleaner;
 using Xunit;
 
@@ -60,6 +62,88 @@ public class UpdateServiceTests
         var exception = await Assert.ThrowsAsync<UpdateException>(() => service.GetLatestReleaseAsync());
 
         Assert.Contains("время ожидания", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task GetLatestReleaseAsync_ParsesOptionalInstallerAssets_WhenPresent()
+    {
+        const string json = """
+            {
+              "tag_name": "v0.0.20",
+              "assets": [
+                { "name": "Cleaner.exe", "browser_download_url": "https://github.com/rkfsociety/Cleaner/releases/download/v0.0.20/Cleaner.exe" },
+                { "name": "Cleaner.exe.sha256", "browser_download_url": "https://github.com/rkfsociety/Cleaner/releases/download/v0.0.20/Cleaner.exe.sha256" },
+                { "name": "Cleaner-Setup.exe", "browser_download_url": "https://github.com/rkfsociety/Cleaner/releases/download/v0.0.20/Cleaner-Setup.exe" },
+                { "name": "Cleaner-Setup.exe.sha256", "browser_download_url": "https://github.com/rkfsociety/Cleaner/releases/download/v0.0.20/Cleaner-Setup.exe.sha256" }
+              ]
+            }
+            """;
+        using var client = new HttpClient(new StubHandler((_, _) =>
+            Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(json, Encoding.UTF8, "application/json")
+            })));
+        var service = new UpdateService(client);
+
+        var release = await service.GetLatestReleaseAsync();
+
+        Assert.NotNull(release);
+        Assert.Equal(new CleanerVersion(0, 0, 20), release!.Version);
+        Assert.NotNull(release.Installer);
+        Assert.NotNull(release.InstallerChecksum);
+        Assert.EndsWith("/Cleaner-Setup.exe", release.Installer!.DownloadUri.AbsoluteUri);
+    }
+
+    [Fact]
+    public async Task GetLatestReleaseAsync_AllowsReleasesWithoutInstallerAssets()
+    {
+        const string json = """
+            {
+              "tag_name": "v0.0.20",
+              "assets": [
+                { "name": "Cleaner.exe", "browser_download_url": "https://github.com/rkfsociety/Cleaner/releases/download/v0.0.20/Cleaner.exe" },
+                { "name": "Cleaner.exe.sha256", "browser_download_url": "https://github.com/rkfsociety/Cleaner/releases/download/v0.0.20/Cleaner.exe.sha256" }
+              ]
+            }
+            """;
+        using var client = new HttpClient(new StubHandler((_, _) =>
+            Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(json, Encoding.UTF8, "application/json")
+            })));
+        var service = new UpdateService(client);
+
+        var release = await service.GetLatestReleaseAsync();
+
+        Assert.NotNull(release);
+        Assert.Null(release!.Installer);
+        Assert.Null(release.InstallerChecksum);
+    }
+
+    [Fact]
+    public void IsInnoInstalledAt_DetectsUninstallerMarkersNextToExecutable()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"cleaner-inno-test-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var exePath = Path.Combine(tempDir, "Cleaner.exe");
+            File.WriteAllBytes(exePath, []);
+            Assert.False(UpdateInstallerService.IsInnoInstalledAt(exePath));
+
+            File.WriteAllBytes(Path.Combine(tempDir, "unins000.exe"), []);
+            Assert.False(UpdateInstallerService.IsInnoInstalledAt(exePath));
+
+            File.WriteAllBytes(Path.Combine(tempDir, "unins000.dat"), []);
+            Assert.True(UpdateInstallerService.IsInnoInstalledAt(exePath));
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+            {
+                Directory.Delete(tempDir, recursive: true);
+            }
+        }
     }
 
     private sealed class StubHandler(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> handler) : HttpMessageHandler

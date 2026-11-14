@@ -38,7 +38,11 @@ public partial class SettingsView : UserControl
         UpdateVersionText.Text = $"Текущая версия: {CleanerVersion.Current}";
         InstallCurrentButton.Visibility = _installerService.IsInstalled ? Visibility.Collapsed : Visibility.Visible;
         InstallCurrentButton.IsEnabled = _installerService.CanInstallCurrentExecutable;
-        if (_installerService.IsInstalled)
+        if (_installerService.IsInnoInstalled)
+        {
+            UpdateStatusText.Text = "Приложение установлено в системе.";
+        }
+        else if (_installerService.IsInstalled)
         {
             UpdateStatusText.Text = "Приложение запускается из папки профиля пользователя.";
         }
@@ -83,27 +87,49 @@ public partial class SettingsView : UserControl
                 return;
             }
 
+            var useInstallerUpdate = _installerService.IsInnoInstalled &&
+                release.Installer is not null &&
+                release.InstallerChecksum is not null;
             UpdateStatusText.Text = $"Доступна версия {release.Version}.";
+            var confirmPrompt = useInstallerUpdate
+                ? $"Доступна версия {release.Version}. Скачать установщик, проверить SHA-256 и обновить Cleaner?"
+                : $"Доступна версия {release.Version}. Скачать, проверить SHA-256 и установить её в профиль пользователя?";
             var install = await _dialog.ConfirmAsync(
                 "Обновление Cleaner",
-                $"Доступна версия {release.Version}. Скачать, проверить SHA-256 и установить её в профиль пользователя?",
+                confirmPrompt,
                 "Установить",
                 "Позже");
             if (!install) return;
 
             UpdateStatusText.Text = "Скачиваем обновление...";
             var progress = new Progress<int>(percent => UpdateStatusText.Text = $"Скачиваем обновление: {percent}%");
-            var stagedExecutable = await _updateService.DownloadAndVerifyAsync(release, progress);
-            UpdateStatusText.Text = "Проверяем SHA-256...";
-            UpdateStatusText.Text = "Запускаем установку... Cleaner перезапустится из папки профиля.";
-            try
+            if (useInstallerUpdate)
             {
-                _installerService.StartInstall(stagedExecutable);
+                var stagedInstaller = await _updateService.DownloadAndVerifyInstallerAsync(release, progress);
+                UpdateStatusText.Text = "Запускаем установщик обновления... Cleaner перезапустится автоматически.";
+                try
+                {
+                    _installerService.StartInstallerUpdate(stagedInstaller);
+                }
+                catch
+                {
+                    _installerService.DeleteStagedExecutable(stagedInstaller);
+                    throw;
+                }
             }
-            catch
+            else
             {
-                _installerService.DeleteStagedExecutable(stagedExecutable);
-                throw;
+                var stagedExecutable = await _updateService.DownloadAndVerifyAsync(release, progress);
+                UpdateStatusText.Text = "Запускаем установку... Cleaner перезапустится из папки профиля.";
+                try
+                {
+                    _installerService.StartInstall(stagedExecutable);
+                }
+                catch
+                {
+                    _installerService.DeleteStagedExecutable(stagedExecutable);
+                    throw;
+                }
             }
 
             Application.Current.Shutdown();

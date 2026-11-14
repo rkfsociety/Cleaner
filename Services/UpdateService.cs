@@ -56,7 +56,13 @@ public readonly record struct CleanerVersion(int Major, int Minor, int Patch) : 
 
 public sealed record UpdateAsset(Uri DownloadUri);
 
-public sealed record CleanerRelease(CleanerVersion Version, string TagName, UpdateAsset Executable, UpdateAsset Checksum);
+public sealed record CleanerRelease(
+    CleanerVersion Version,
+    string TagName,
+    UpdateAsset Executable,
+    UpdateAsset Checksum,
+    UpdateAsset? Installer = null,
+    UpdateAsset? InstallerChecksum = null);
 
 public sealed class UpdateException : Exception
 {
@@ -131,9 +137,11 @@ public sealed class UpdateService
             }
 
             var assets = root.GetProperty("assets").EnumerateArray().ToArray();
-            var executable = FindAsset(assets, "Cleaner.exe");
-            var checksum = FindAsset(assets, "Cleaner.exe.sha256");
-            return new CleanerRelease(version, tagName!, executable, checksum);
+            var executable = FindAsset(assets, "Cleaner.exe", required: true)!;
+            var checksum = FindAsset(assets, "Cleaner.exe.sha256", required: true)!;
+            var installer = FindAsset(assets, "Cleaner-Setup.exe", required: false);
+            var installerChecksum = FindAsset(assets, "Cleaner-Setup.exe.sha256", required: false);
+            return new CleanerRelease(version, tagName!, executable, checksum, installer, installerChecksum);
         }
         catch (OperationCanceledException exception) when (!cancellationToken.IsCancellationRequested)
         {
@@ -161,10 +169,31 @@ public sealed class UpdateService
             remaining.Any(value => string.Equals(value.Trim(), "0", StringComparison.Ordinal));
     }
 
-    public async Task<string> DownloadAndVerifyAsync(
+    public Task<string> DownloadAndVerifyAsync(
+        CleanerRelease release,
+        IProgress<int>? downloadProgress = null,
+        CancellationToken cancellationToken = default) =>
+        DownloadAndVerifyAssetAsync(release.Executable, release.Checksum, "Cleaner.exe", downloadProgress, cancellationToken);
+
+    public Task<string> DownloadAndVerifyInstallerAsync(
         CleanerRelease release,
         IProgress<int>? downloadProgress = null,
         CancellationToken cancellationToken = default)
+    {
+        if (release.Installer is null || release.InstallerChecksum is null)
+        {
+            throw new InvalidDataException("В последнем релизе отсутствует установщик Cleaner-Setup.exe.");
+        }
+
+        return DownloadAndVerifyAssetAsync(release.Installer, release.InstallerChecksum, "Cleaner-Setup.exe", downloadProgress, cancellationToken);
+    }
+
+    private static async Task<string> DownloadAndVerifyAssetAsync(
+        UpdateAsset fileAsset,
+        UpdateAsset checksumAsset,
+        string fileName,
+        IProgress<int>? downloadProgress,
+        CancellationToken cancellationToken)
     {
         var updateRoot = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -172,7 +201,7 @@ public sealed class UpdateService
             "updates",
             Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(updateRoot);
-        var executablePath = Path.Combine(updateRoot, "Cleaner.exe");
+        var destinationPath = Path.Combine(updateRoot, fileName);
 
         try
         {
@@ -180,23 +209,23 @@ public sealed class UpdateService
             timeout.CancelAfter(TimeSpan.FromMinutes(15));
             var transferToken = timeout.Token;
 
-            var checksumText = await DownloadTextAsync(release.Checksum.DownloadUri, transferToken);
+            var checksumText = await DownloadTextAsync(checksumAsset.DownloadUri, transferToken);
             var expectedHash = checksumText.Trim();
             if (!Regex.IsMatch(expectedHash, "^[a-fA-F0-9]{64}$", RegexOptions.CultureInvariant))
             {
                 throw new InvalidDataException("Файл SHA-256 релиза имеет неверный формат.");
             }
 
-            await DownloadFileAsync(release.Executable.DownloadUri, executablePath, downloadProgress, transferToken);
-            await using var executable = File.OpenRead(executablePath);
-            var actualHash = await SHA256.HashDataAsync(executable, transferToken);
+            await DownloadFileAsync(fileAsset.DownloadUri, destinationPath, downloadProgress, transferToken);
+            await using var fileStream = File.OpenRead(destinationPath);
+            var actualHash = await SHA256.HashDataAsync(fileStream, transferToken);
             var expectedBytes = Convert.FromHexString(expectedHash);
             if (!CryptographicOperations.FixedTimeEquals(actualHash, expectedBytes))
             {
-                throw new InvalidDataException("SHA-256 скачанного Cleaner.exe не совпадает с файлом релиза.");
+                throw new InvalidDataException($"SHA-256 скачанного {fileName} не совпадает с файлом релиза.");
             }
 
-            return executablePath;
+            return destinationPath;
         }
         catch
         {
@@ -207,9 +236,14 @@ public sealed class UpdateService
         }
     }
 
-    private static UpdateAsset FindAsset(JsonElement[] assets, string name)
+    private static UpdateAsset? FindAsset(JsonElement[] assets, string name, bool required)
     {
         var matches = assets.Where(asset => string.Equals(asset.GetProperty("name").GetString(), name, StringComparison.Ordinal)).ToArray();
+        if (matches.Length == 0 && !required)
+        {
+            return null;
+        }
+
         if (matches.Length != 1)
         {
             throw new InvalidDataException($"В последнем релизе Cleaner должен быть один файл {name}.");
@@ -279,7 +313,7 @@ public sealed class UpdateService
 
         if (output.Length == 0)
         {
-            throw new InvalidDataException("GitHub вернул пустой файл Cleaner.exe.");
+            throw new InvalidDataException($"GitHub вернул пустой файл {Path.GetFileName(destination)}.");
         }
     }
 }
