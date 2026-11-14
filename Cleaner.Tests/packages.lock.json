@@ -87,7 +87,7 @@
           "xunit.extensibility.core": "[2.9.3]"
         }
       },
-      "cleaner": {
+      "diskpulse": {
         "type": "Project"
       }
     }

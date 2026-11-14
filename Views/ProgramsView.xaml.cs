@@ -326,7 +326,7 @@ public partial class ProgramsView : UserControl
 
         var confirmed = await _dialog.ConfirmAsync(
             "Удаление программы",
-            $"Запустить удаление «{program.Name}»?\n\nCleaner ничего не удаляет сам: он запускает деинсталлятор производителя, который может запросить права администратора и своё подтверждение.\n\nКоманда: {command.Display}",
+            $"Запустить удаление «{program.Name}»?\n\nDiskPulse ничего не удаляет сам: он запускает деинсталлятор производителя, который может запросить права администратора и своё подтверждение.\n\nКоманда: {command.Display}",
             "Запустить удаление");
         if (!confirmed)
         {
@@ -440,7 +440,7 @@ public partial class ProgramsView : UserControl
     {
         var reasons = fileReasons.Keys.Concat(registryReasons.Keys).ToHashSet();
         var advice = new List<string>();
-        if (reasons.Contains(CleanupSkipReason.AccessDenied)) advice.Add("запустите Cleaner от имени администратора");
+        if (reasons.Contains(CleanupSkipReason.AccessDenied)) advice.Add("запустите DiskPulse от имени администратора");
         if (reasons.Contains(CleanupSkipReason.FileInUse)) advice.Add("закройте программу, использующую файлы, и повторите очистку");
         if (reasons.Contains(CleanupSkipReason.NotFound) || reasons.Contains(CleanupSkipReason.Changed)) advice.Add("повторно обновите список остатков");
         if (reasons.Contains(CleanupSkipReason.ReparsePoint)) advice.Add("ссылки и junction пропущены намеренно для защиты данных");
@@ -469,7 +469,7 @@ public partial class ProgramsView : UserControl
         {
             Title = "Экспорт списка программ",
             Filter = "CSV (разделители — запятые)|*.csv|JSON (*.json)|*.json",
-            FileName = $"cleaner-programs-{DateTime.Now:yyyyMMdd-HHmm}"
+            FileName = $"diskpulse-programs-{DateTime.Now:yyyyMMdd-HHmm}"
         };
         if (dialog.ShowDialog() != true)
         {
@@ -490,7 +490,7 @@ public partial class ProgramsView : UserControl
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
             AppLogService.Write("Ошибка экспорта списка программ", exception);
-            await _dialog.ShowMessageAsync("Cleaner", "Не удалось сохранить файл экспорта. Проверьте права доступа.");
+            await _dialog.ShowMessageAsync("DiskPulse", "Не удалось сохранить файл экспорта. Проверьте права доступа.");
         }
     }
 
@@ -505,7 +505,7 @@ public partial class ProgramsView : UserControl
         catch (Exception exception) when (exception is Win32Exception or FileNotFoundException)
         {
             AppLogService.Write("Не удалось открыть параметры Windows", exception);
-            await _dialog.ShowMessageAsync("Cleaner", "Не удалось открыть окно Windows. Откройте «Параметры → Приложения» вручную.");
+            await _dialog.ShowMessageAsync("DiskPulse", "Не удалось открыть окно Windows. Откройте «Параметры → Приложения» вручную.");
         }
     }
 

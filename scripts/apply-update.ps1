@@ -10,7 +10,7 @@
 
 $ErrorActionPreference = 'Stop'
 $targetDirectory = Split-Path -Parent $TargetPath
-$backupPath = Join-Path $targetDirectory 'Cleaner.exe.previous'
+$backupPath = Join-Path $targetDirectory 'DiskPulse.exe.previous'
 $hadOriginal = $false
 
 try {
@@ -65,7 +65,7 @@ catch {
 
     try {
         [System.IO.Directory]::CreateDirectory((Split-Path -Parent $FailureMarkerPath)) | Out-Null
-        [System.IO.File]::WriteAllText($FailureMarkerPath, "Не удалось установить Cleaner: $installError", [System.Text.Encoding]::UTF8)
+        [System.IO.File]::WriteAllText($FailureMarkerPath, "Не удалось установить DiskPulse: $installError", [System.Text.Encoding]::UTF8)
     }
     catch {
         $markerError = $_.Exception.Message
@@ -83,7 +83,7 @@ catch {
             $launchError = $_.Exception.Message
             try {
                 [System.IO.Directory]::CreateDirectory((Split-Path -Parent $LogPath)) | Out-Null
-                [System.IO.File]::AppendAllText($LogPath, "[$([DateTime]::Now.ToString('s'))] Не удалось перезапустить Cleaner после ошибки установки: $launchError`r`n", [System.Text.Encoding]::UTF8)
+                [System.IO.File]::AppendAllText($LogPath, "[$([DateTime]::Now.ToString('s'))] Не удалось перезапустить DiskPulse после ошибки установки: $launchError`r`n", [System.Text.Encoding]::UTF8)
             }
             catch { [Console]::Error.WriteLine("Не удалось записать журнал перезапуска: $($_.Exception.Message)") }
         }

@@ -26,8 +26,8 @@ jobs:
         id: version
         shell: pwsh
         run: |
-          $version = [string](dotnet msbuild Cleaner.csproj -nologo -getProperty:Version)
-          if ($LASTEXITCODE -ne 0) { throw "Не удалось прочитать версию Cleaner.csproj" }
+          $version = [string](dotnet msbuild DiskPulse.csproj -nologo -getProperty:Version)
+          if ($LASTEXITCODE -ne 0) { throw "Не удалось прочитать версию DiskPulse.csproj" }
           $version = $version.Trim()
           if ($version -notmatch '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$') {
               throw "Версия должна иметь формат MAJOR.MINOR.PATCH без ведущих нулей: $version"
@@ -44,7 +44,7 @@ jobs:
         run: dotnet restore Cleaner.Tests/Cleaner.Tests.csproj --locked-mode
 
       - name: Build
-        run: dotnet build Cleaner.csproj --configuration Release --no-restore
+        run: dotnet build DiskPulse.csproj --configuration Release --no-restore
 
       - name: Test
         run: dotnet test Cleaner.Tests/Cleaner.Tests.csproj --configuration Release --no-restore
@@ -75,14 +75,14 @@ jobs:
       - name: Verify published artifacts
         shell: pwsh
         run: |
-          if (!(Test-Path publish/win-x64/Cleaner.exe)) { throw "Cleaner.exe was not published" }
-          if (!(Test-Path publish/installer/Cleaner-Setup.exe)) { throw "Cleaner-Setup.exe was not built" }
+          if (!(Test-Path publish/win-x64/DiskPulse.exe)) { throw "DiskPulse.exe was not published" }
+          if (!(Test-Path publish/installer/DiskPulse-Setup.exe)) { throw "DiskPulse-Setup.exe was not built" }
 
       - name: Create SHA-256 files
         if: github.event_name == 'push'
         shell: pwsh
         run: |
-          foreach ($artifact in @("publish/win-x64/Cleaner.exe", "publish/installer/Cleaner-Setup.exe")) {
+          foreach ($artifact in @("publish/win-x64/DiskPulse.exe", "publish/installer/DiskPulse-Setup.exe")) {
               $checksum = (Get-FileHash -LiteralPath $artifact -Algorithm SHA256).Hash.ToLowerInvariant()
               [System.IO.File]::WriteAllText("$artifact.sha256", $checksum, [System.Text.Encoding]::ASCII)
           }
@@ -93,10 +93,10 @@ jobs:
         with:
           name: release-files
           path: |
-            publish/win-x64/Cleaner.exe
-            publish/win-x64/Cleaner.exe.sha256
-            publish/installer/Cleaner-Setup.exe
-            publish/installer/Cleaner-Setup.exe.sha256
+            publish/win-x64/DiskPulse.exe
+            publish/win-x64/DiskPulse.exe.sha256
+            publish/installer/DiskPulse-Setup.exe
+            publish/installer/DiskPulse-Setup.exe.sha256
           if-no-files-found: error
           retention-days: 3
 
@@ -155,7 +155,7 @@ jobs:
             const knownVersions = [...versionTags, ...versionReleases];
             const highest = knownVersions.reduce((top, item) => !top || compare(item.parsed, top.parsed) > 0 ? item : top, null);
             if (highest && compare(currentVersion, highest.parsed) < 0) {
-              throw new Error(`Project version ${version} is below the latest existing version ${highest.name}. Increase Cleaner.csproj Version.`);
+              throw new Error(`Project version ${version} is below the latest existing version ${highest.name}. Increase DiskPulse.csproj Version.`);
             }
 
             let release = releases.find(item => item.tag_name === tagName);
@@ -177,10 +177,10 @@ jobs:
 
             try {
               const requiredAssets = [
-                { name: 'Cleaner.exe', path: 'release-files/Cleaner.exe' },
-                { name: 'Cleaner.exe.sha256', path: 'release-files/Cleaner.exe.sha256' },
-                { name: 'Cleaner-Setup.exe', path: 'release-files/Cleaner-Setup.exe' },
-                { name: 'Cleaner-Setup.exe.sha256', path: 'release-files/Cleaner-Setup.exe.sha256' }
+                { name: 'DiskPulse.exe', path: 'release-files/DiskPulse.exe' },
+                { name: 'DiskPulse.exe.sha256', path: 'release-files/DiskPulse.exe.sha256' },
+                { name: 'DiskPulse-Setup.exe', path: 'release-files/DiskPulse-Setup.exe' },
+                { name: 'DiskPulse-Setup.exe.sha256', path: 'release-files/DiskPulse-Setup.exe.sha256' }
               ];
               for (const asset of requiredAssets) {
                 if (release.assets.some(existing => existing.name === asset.name)) continue;

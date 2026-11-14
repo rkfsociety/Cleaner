@@ -5,15 +5,15 @@
 $ErrorActionPreference = "Stop"
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$projectPath = Join-Path $repoRoot "Cleaner.csproj"
+$projectPath = Join-Path $repoRoot "DiskPulse.csproj"
 $publishScript = Join-Path $PSScriptRoot "publish-windows.ps1"
 $publishDir = Join-Path $repoRoot "publish\win-x64"
-$installerScript = Join-Path $repoRoot "installer\Cleaner.iss"
+$installerScript = Join-Path $repoRoot "installer\DiskPulse.iss"
 $outputDir = Join-Path $repoRoot "publish\installer"
 
 $version = [string](dotnet msbuild $projectPath -nologo -getProperty:Version)
 if ($LASTEXITCODE -ne 0) {
-    throw "Не удалось прочитать версию из Cleaner.csproj."
+    throw "Не удалось прочитать версию из DiskPulse.csproj."
 }
 
 $version = $version.Trim()
@@ -25,7 +25,7 @@ if (-not $SkipPublish) {
     & $publishScript
 }
 
-$publishedExe = Join-Path $publishDir "Cleaner.exe"
+$publishedExe = Join-Path $publishDir "DiskPulse.exe"
 if (!(Test-Path -LiteralPath $publishedExe -PathType Leaf)) {
     throw "Не найден опубликованный файл $publishedExe. Запустите scripts\publish-windows.ps1."
 }
@@ -50,14 +50,14 @@ New-Item -ItemType Directory -Force -Path $outputDir | Out-Null
     "/DMyAppVersion=$version" `
     "/DPublishDir=$publishDir" `
     "/DOutputDir=$outputDir" `
-    "/DOutputBaseFilename=Cleaner-Setup" `
+    "/DOutputBaseFilename=DiskPulse-Setup" `
     $installerScript
 
 if ($LASTEXITCODE -ne 0) {
     throw "Сборка установщика Inno Setup завершилась с ошибкой: $LASTEXITCODE"
 }
 
-$setupExe = Join-Path $outputDir "Cleaner-Setup.exe"
+$setupExe = Join-Path $outputDir "DiskPulse-Setup.exe"
 if (!(Test-Path -LiteralPath $setupExe -PathType Leaf)) {
     throw "Установщик $setupExe не был создан."
 }

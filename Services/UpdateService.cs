@@ -44,10 +44,10 @@ public readonly record struct CleanerVersion(int Major, int Minor, int Patch) : 
     private static CleanerVersion FromAssemblyVersion()
     {
         var version = typeof(CleanerVersion).Assembly.GetName().Version
-            ?? throw new InvalidOperationException("В сборке Cleaner не указана версия.");
+            ?? throw new InvalidOperationException("В сборке DiskPulse не указана версия.");
         if (version.Build < 0)
         {
-            throw new InvalidOperationException("Версия Cleaner должна содержать три числовых компонента.");
+            throw new InvalidOperationException("Версия DiskPulse должна содержать три числовых компонента.");
         }
 
         return new CleanerVersion(version.Major, version.Minor, version.Build);
@@ -78,7 +78,11 @@ public sealed class UpdateException : Exception
 public sealed class UpdateService
 {
     private const string Owner = "rkfsociety";
-    private const string Repository = "Cleaner";
+    private const string Repository = "DiskPulse";
+    private const string ExecutableAssetName = "DiskPulse.exe";
+    private const string ChecksumAssetName = "DiskPulse.exe.sha256";
+    private const string InstallerAssetName = "DiskPulse-Setup.exe";
+    private const string InstallerChecksumAssetName = "DiskPulse-Setup.exe.sha256";
     private static readonly TimeSpan DefaultApiTimeout = TimeSpan.FromSeconds(15);
     private static readonly HttpClient Client = new();
     private static readonly Uri LatestReleaseUri = new($"https://api.github.com/repos/{Owner}/{Repository}/releases/latest");
@@ -104,7 +108,7 @@ public sealed class UpdateService
         try
         {
             using var request = new HttpRequestMessage(HttpMethod.Get, LatestReleaseUri);
-            request.Headers.UserAgent.ParseAdd("Cleaner-Updater/1.0");
+            request.Headers.UserAgent.ParseAdd("DiskPulse-Updater/1.0");
             request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
             using var response = await _client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, requestToken);
             if (response.StatusCode == HttpStatusCode.NotFound)
@@ -133,14 +137,14 @@ public sealed class UpdateService
             var tagName = root.GetProperty("tag_name").GetString();
             if (!CleanerVersion.TryParseTag(tagName, out var version))
             {
-                throw new InvalidDataException("Последний релиз Cleaner содержит некорректный номер версии.");
+                throw new InvalidDataException("Последний релиз DiskPulse содержит некорректный номер версии.");
             }
 
             var assets = root.GetProperty("assets").EnumerateArray().ToArray();
-            var executable = FindAsset(assets, "Cleaner.exe", required: true)!;
-            var checksum = FindAsset(assets, "Cleaner.exe.sha256", required: true)!;
-            var installer = FindAsset(assets, "Cleaner-Setup.exe", required: false);
-            var installerChecksum = FindAsset(assets, "Cleaner-Setup.exe.sha256", required: false);
+            var executable = FindAsset(assets, ExecutableAssetName, required: true)!;
+            var checksum = FindAsset(assets, ChecksumAssetName, required: true)!;
+            var installer = FindAsset(assets, InstallerAssetName, required: false);
+            var installerChecksum = FindAsset(assets, InstallerChecksumAssetName, required: false);
             return new CleanerRelease(version, tagName!, executable, checksum, installer, installerChecksum);
         }
         catch (OperationCanceledException exception) when (!cancellationToken.IsCancellationRequested)
@@ -173,7 +177,7 @@ public sealed class UpdateService
         CleanerRelease release,
         IProgress<int>? downloadProgress = null,
         CancellationToken cancellationToken = default) =>
-        DownloadAndVerifyAssetAsync(release.Executable, release.Checksum, "Cleaner.exe", downloadProgress, cancellationToken);
+        DownloadAndVerifyAssetAsync(release.Executable, release.Checksum, ExecutableAssetName, downloadProgress, cancellationToken);
 
     public Task<string> DownloadAndVerifyInstallerAsync(
         CleanerRelease release,
@@ -182,10 +186,10 @@ public sealed class UpdateService
     {
         if (release.Installer is null || release.InstallerChecksum is null)
         {
-            throw new InvalidDataException("В последнем релизе отсутствует установщик Cleaner-Setup.exe.");
+            throw new InvalidDataException($"В последнем релизе отсутствует установщик {InstallerAssetName}.");
         }
 
-        return DownloadAndVerifyAssetAsync(release.Installer, release.InstallerChecksum, "Cleaner-Setup.exe", downloadProgress, cancellationToken);
+        return DownloadAndVerifyAssetAsync(release.Installer, release.InstallerChecksum, InstallerAssetName, downloadProgress, cancellationToken);
     }
 
     private static async Task<string> DownloadAndVerifyAssetAsync(
@@ -246,7 +250,7 @@ public sealed class UpdateService
 
         if (matches.Length != 1)
         {
-            throw new InvalidDataException($"В последнем релизе Cleaner должен быть один файл {name}.");
+            throw new InvalidDataException($"В последнем релизе DiskPulse должен быть один файл {name}.");
         }
 
         var url = matches[0].GetProperty("browser_download_url").GetString();
@@ -255,7 +259,7 @@ public sealed class UpdateService
             !string.Equals(uri.Host, "github.com", StringComparison.OrdinalIgnoreCase) ||
             !uri.AbsolutePath.StartsWith($"/{Owner}/{Repository}/releases/download/", StringComparison.Ordinal))
         {
-            throw new InvalidDataException($"Ссылка на файл {name} ведёт не на релиз Cleaner.");
+            throw new InvalidDataException($"Ссылка на файл {name} ведёт не на релиз DiskPulse.");
         }
 
         return new UpdateAsset(uri);

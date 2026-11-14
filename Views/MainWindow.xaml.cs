@@ -57,7 +57,7 @@ public partial class MainWindow : Window
             var updateFailure = _updateInstallerService.ConsumeInstallFailure();
             if (updateFailure is not null)
             {
-                await Dialog.ShowMessageAsync("Обновление Cleaner", updateFailure);
+                await Dialog.ShowMessageAsync("Обновление DiskPulse", updateFailure);
             }
             await UpdateDiskUsageAsync();
         };
@@ -300,7 +300,7 @@ public partial class MainWindow : Window
         var deleteDevCaches = DevCachesCheckBox.IsChecked == true;
         if (!deleteUserTemp && !deleteWindowsTemp && !deleteRecycleBin && !deleteDevCaches)
         {
-            await Dialog.ShowMessageAsync("Cleaner", "Выберите хотя бы одну категорию для очистки.");
+            await Dialog.ShowMessageAsync("DiskPulse", "Выберите хотя бы одну категорию для очистки.");
             return;
         }
 
@@ -455,7 +455,7 @@ public partial class MainWindow : Window
         await UpdateDiskUsageAsync();
         if (!_settingsService.SaveSelectedDrives(_selectedDriveRoots))
         {
-            await Dialog.ShowMessageAsync("Cleaner", "Выбор дисков применён для текущего запуска, но не сохранён. Проверьте доступ к папке данных Cleaner.");
+            await Dialog.ShowMessageAsync("DiskPulse", "Выбор дисков применён для текущего запуска, но не сохранён. Проверьте доступ к папке данных приложения.");
         }
     }
 
@@ -487,7 +487,7 @@ public partial class MainWindow : Window
         _permanentExclusions = exclusions;
         if (!_exclusionService.Save(exclusions))
         {
-            await Dialog.ShowMessageAsync("Cleaner", "Белый список обновлён для текущего запуска, но не сохранён. Проверьте доступ к папке данных Cleaner.");
+            await Dialog.ShowMessageAsync("DiskPulse", "Белый список обновлён для текущего запуска, но не сохранён. Проверьте доступ к папке данных приложения.");
         }
     }
 
@@ -496,7 +496,7 @@ public partial class MainWindow : Window
         _minimumFileAgeHours = minimumFileAgeHours;
         if (!_policyService.SaveMinimumAgeHours(_minimumFileAgeHours))
         {
-            await Dialog.ShowMessageAsync("Cleaner", "Режим применён для текущего запуска, но не сохранён. Проверьте доступ к папке данных Cleaner.");
+            await Dialog.ShowMessageAsync("DiskPulse", "Режим применён для текущего запуска, но не сохранён. Проверьте доступ к папке данных приложения.");
         }
     }
 

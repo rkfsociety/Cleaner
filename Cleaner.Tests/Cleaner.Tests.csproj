@@ -14,7 +14,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Cleaner.csproj" />
+    <ProjectReference Include="..\DiskPulse.csproj" />
   </ItemGroup>
 
 </Project>

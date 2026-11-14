@@ -3,6 +3,9 @@
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
+    <RootNamespace>Cleaner</RootNamespace>
+    <AssemblyName>DiskPulse</AssemblyName>
+    <Product>DiskPulse</Product>
     <Version>0.0.20</Version>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>

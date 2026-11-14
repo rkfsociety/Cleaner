@@ -46,7 +46,7 @@ public partial class App : Application
             }
             catch (Exception ex)
             {
-                AppLogService.Write("Не удалось запустить Cleaner с правами администратора", ex);
+                AppLogService.Write("Не удалось запустить DiskPulse с правами администратора", ex);
             }
 
             Shutdown();
@@ -56,7 +56,7 @@ public partial class App : Application
     private static void OnDispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
     {
         AppLogService.Write("Необработанная ошибка интерфейса", e.Exception);
-        ShowError("Произошла ошибка приложения. Подробности сохранены в журнале Cleaner.");
+        ShowError("Произошла ошибка приложения. Подробности сохранены в журнале DiskPulse.");
         e.Handled = true;
     }
 
@@ -65,7 +65,7 @@ public partial class App : Application
     {
         if (Current?.MainWindow is MainWindow main)
         {
-            _ = main.DialogHost.ShowMessageAsync("Cleaner", message);
+            _ = main.DialogHost.ShowMessageAsync("DiskPulse", message);
         }
     }
 

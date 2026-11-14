@@ -42,7 +42,7 @@ public partial class DriveSelectionView : UserControl
         var selected = _driveChecks.Where(check => check.IsChecked == true).Select(check => (string)check.Tag).ToArray();
         if (selected.Length == 0)
         {
-            await _dialog.ShowMessageAsync("Cleaner", "Выберите хотя бы один диск.");
+            await _dialog.ShowMessageAsync("DiskPulse", "Выберите хотя бы один диск.");
             return;
         }
 

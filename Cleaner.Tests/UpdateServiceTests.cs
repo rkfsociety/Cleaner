@@ -71,10 +71,10 @@ public class UpdateServiceTests
             {
               "tag_name": "v0.0.20",
               "assets": [
-                { "name": "Cleaner.exe", "browser_download_url": "https://github.com/rkfsociety/Cleaner/releases/download/v0.0.20/Cleaner.exe" },
-                { "name": "Cleaner.exe.sha256", "browser_download_url": "https://github.com/rkfsociety/Cleaner/releases/download/v0.0.20/Cleaner.exe.sha256" },
-                { "name": "Cleaner-Setup.exe", "browser_download_url": "https://github.com/rkfsociety/Cleaner/releases/download/v0.0.20/Cleaner-Setup.exe" },
-                { "name": "Cleaner-Setup.exe.sha256", "browser_download_url": "https://github.com/rkfsociety/Cleaner/releases/download/v0.0.20/Cleaner-Setup.exe.sha256" }
+                { "name": "DiskPulse.exe", "browser_download_url": "https://github.com/rkfsociety/DiskPulse/releases/download/v0.0.20/DiskPulse.exe" },
+                { "name": "DiskPulse.exe.sha256", "browser_download_url": "https://github.com/rkfsociety/DiskPulse/releases/download/v0.0.20/DiskPulse.exe.sha256" },
+                { "name": "DiskPulse-Setup.exe", "browser_download_url": "https://github.com/rkfsociety/DiskPulse/releases/download/v0.0.20/DiskPulse-Setup.exe" },
+                { "name": "DiskPulse-Setup.exe.sha256", "browser_download_url": "https://github.com/rkfsociety/DiskPulse/releases/download/v0.0.20/DiskPulse-Setup.exe.sha256" }
               ]
             }
             """;
@@ -91,7 +91,7 @@ public class UpdateServiceTests
         Assert.Equal(new CleanerVersion(0, 0, 20), release!.Version);
         Assert.NotNull(release.Installer);
         Assert.NotNull(release.InstallerChecksum);
-        Assert.EndsWith("/Cleaner-Setup.exe", release.Installer!.DownloadUri.AbsoluteUri);
+        Assert.EndsWith("/DiskPulse-Setup.exe", release.Installer!.DownloadUri.AbsoluteUri);
     }
 
     [Fact]
@@ -101,8 +101,8 @@ public class UpdateServiceTests
             {
               "tag_name": "v0.0.20",
               "assets": [
-                { "name": "Cleaner.exe", "browser_download_url": "https://github.com/rkfsociety/Cleaner/releases/download/v0.0.20/Cleaner.exe" },
-                { "name": "Cleaner.exe.sha256", "browser_download_url": "https://github.com/rkfsociety/Cleaner/releases/download/v0.0.20/Cleaner.exe.sha256" }
+                { "name": "DiskPulse.exe", "browser_download_url": "https://github.com/rkfsociety/DiskPulse/releases/download/v0.0.20/DiskPulse.exe" },
+                { "name": "DiskPulse.exe.sha256", "browser_download_url": "https://github.com/rkfsociety/DiskPulse/releases/download/v0.0.20/DiskPulse.exe.sha256" }
               ]
             }
             """;
@@ -127,7 +127,7 @@ public class UpdateServiceTests
         Directory.CreateDirectory(tempDir);
         try
         {
-            var exePath = Path.Combine(tempDir, "Cleaner.exe");
+            var exePath = Path.Combine(tempDir, "DiskPulse.exe");
             File.WriteAllBytes(exePath, []);
             Assert.False(UpdateInstallerService.IsInnoInstalledAt(exePath));
 

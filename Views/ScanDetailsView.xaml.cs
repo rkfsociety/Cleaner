@@ -161,7 +161,7 @@ public partial class ScanDetailsView : UserControl
         {
             Title = "Экспорт отчёта о проверке",
             Filter = "CSV (разделители — запятые)|*.csv|JSON (*.json)|*.json",
-            FileName = $"cleaner-scan-{DateTime.Now:yyyyMMdd-HHmm}"
+            FileName = $"diskpulse-scan-{DateTime.Now:yyyyMMdd-HHmm}"
         };
         if (dialog.ShowDialog() != true)
         {
@@ -182,7 +182,7 @@ public partial class ScanDetailsView : UserControl
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
             AppLogService.Write("Ошибка экспорта отчёта сканирования", exception);
-            await _dialog.ShowMessageAsync("Cleaner", "Не удалось сохранить файл отчёта. Проверьте права доступа.");
+            await _dialog.ShowMessageAsync("DiskPulse", "Не удалось сохранить файл отчёта. Проверьте права доступа.");
         }
     }
 

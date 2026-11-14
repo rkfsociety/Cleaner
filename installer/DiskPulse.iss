@@ -1,4 +1,4 @@
-; Cleaner Inno Setup 6 installer script
+; DiskPulse Inno Setup 6 installer script
 
 #ifndef MyAppVersion
   #define MyAppVersion "0.0.20"
@@ -10,13 +10,13 @@
   #define OutputDir "..\publish\installer"
 #endif
 #ifndef OutputBaseFilename
-  #define OutputBaseFilename "Cleaner-Setup"
+  #define OutputBaseFilename "DiskPulse-Setup"
 #endif
 
-#define MyAppName "Cleaner"
+#define MyAppName "DiskPulse"
 #define MyAppPublisher "rkfsociety"
-#define MyAppURL "https://github.com/rkfsociety/Cleaner"
-#define MyAppExeName "Cleaner.exe"
+#define MyAppURL "https://github.com/rkfsociety/DiskPulse"
+#define MyAppExeName "DiskPulse.exe"
 
 [Setup]
 AppId={{B8E4C7D2-9A3F-4F5B-8C12-6E4A1D9F0B37}
@@ -76,15 +76,15 @@ begin
   Result := ExpandConstant('{param:relaunch|0}') = '1';
 end;
 
-procedure CleanupLegacyProfileInstall;
+procedure CleanupProfileInstall(const AppSubDir, ExeName, ShortcutName: string);
 var
   LegacyDir: string;
   LegacyExe: string;
   LegacyShortcut: string;
 begin
-  LegacyDir := ExpandConstant('{localappdata}\Programs\Cleaner');
-  LegacyExe := LegacyDir + '\Cleaner.exe';
-  LegacyShortcut := ExpandConstant('{userprograms}\Cleaner.lnk');
+  LegacyDir := ExpandConstant('{localappdata}\Programs\') + AppSubDir;
+  LegacyExe := LegacyDir + '\' + ExeName;
+  LegacyShortcut := ExpandConstant('{userprograms}\') + ShortcutName;
 
   if FileExists(LegacyExe) then
   begin
@@ -102,6 +102,7 @@ procedure CurStepChanged(CurStep: TSetupStep);
 begin
   if CurStep = ssPostInstall then
   begin
-    CleanupLegacyProfileInstall;
+    CleanupProfileInstall('DiskPulse', 'DiskPulse.exe', 'DiskPulse.lnk');
+    CleanupProfileInstall('Cleaner', 'Cleaner.exe', 'Cleaner.lnk');
   end;
 end;

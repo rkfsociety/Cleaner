@@ -1,11 +1,11 @@
-$ErrorActionPreference = "Stop"
+﻿$ErrorActionPreference = "Stop"
 
-$projectPath = Join-Path $PSScriptRoot "..\Cleaner.csproj"
+$projectPath = Join-Path $PSScriptRoot "..\DiskPulse.csproj"
 $outputPath = Join-Path $PSScriptRoot "..\publish\win-x64"
 
 dotnet restore $projectPath --runtime win-x64 --locked-mode
 if ($LASTEXITCODE -ne 0) {
-    throw "Восстановление зависимостей Cleaner завершилось с ошибкой: $LASTEXITCODE"
+    throw "Восстановление зависимостей DiskPulse завершилось с ошибкой: $LASTEXITCODE"
 }
 
 dotnet publish $projectPath `
@@ -18,7 +18,7 @@ dotnet publish $projectPath `
     --no-restore
 
 if ($LASTEXITCODE -ne 0) {
-    throw "Публикация Cleaner завершилась с ошибкой: $LASTEXITCODE"
+    throw "Публикация DiskPulse завершилась с ошибкой: $LASTEXITCODE"
 }
 
-Write-Host "Published: $outputPath\Cleaner.exe"
+Write-Host "Published: $outputPath\DiskPulse.exe"

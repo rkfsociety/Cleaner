@@ -48,7 +48,7 @@ public partial class SettingsView : UserControl
         }
         else if (!_installerService.CanInstallCurrentExecutable)
         {
-            UpdateStatusText.Text = "Установка доступна из автономного Cleaner.exe.";
+            UpdateStatusText.Text = "Установка доступна из автономного DiskPulse.exe.";
         }
     }
 
@@ -76,14 +76,14 @@ public partial class SettingsView : UserControl
             if (release is null)
             {
                 UpdateStatusText.Text = "Опубликованных релизов пока нет.";
-                await _dialog.ShowMessageAsync("Обновления Cleaner", "Пока нет опубликованного релиза Cleaner.");
+                await _dialog.ShowMessageAsync("Обновления DiskPulse", "Пока нет опубликованного релиза DiskPulse.");
                 return;
             }
 
             if (release.Version.CompareTo(CleanerVersion.Current) <= 0)
             {
                 UpdateStatusText.Text = $"Установлена последняя версия {CleanerVersion.Current}.";
-                await _dialog.ShowMessageAsync("Обновления Cleaner", $"Установлена последняя версия {CleanerVersion.Current}.");
+                await _dialog.ShowMessageAsync("Обновления DiskPulse", $"Установлена последняя версия {CleanerVersion.Current}.");
                 return;
             }
 
@@ -92,10 +92,10 @@ public partial class SettingsView : UserControl
                 release.InstallerChecksum is not null;
             UpdateStatusText.Text = $"Доступна версия {release.Version}.";
             var confirmPrompt = useInstallerUpdate
-                ? $"Доступна версия {release.Version}. Скачать установщик, проверить SHA-256 и обновить Cleaner?"
+                ? $"Доступна версия {release.Version}. Скачать установщик, проверить SHA-256 и обновить DiskPulse?"
                 : $"Доступна версия {release.Version}. Скачать, проверить SHA-256 и установить её в профиль пользователя?";
             var install = await _dialog.ConfirmAsync(
-                "Обновление Cleaner",
+                "Обновление DiskPulse",
                 confirmPrompt,
                 "Установить",
                 "Позже");
@@ -106,7 +106,7 @@ public partial class SettingsView : UserControl
             if (useInstallerUpdate)
             {
                 var stagedInstaller = await _updateService.DownloadAndVerifyInstallerAsync(release, progress);
-                UpdateStatusText.Text = "Запускаем установщик обновления... Cleaner перезапустится автоматически.";
+                UpdateStatusText.Text = "Запускаем установщик обновления... DiskPulse перезапустится автоматически.";
                 try
                 {
                     _installerService.StartInstallerUpdate(stagedInstaller);
@@ -120,7 +120,7 @@ public partial class SettingsView : UserControl
             else
             {
                 var stagedExecutable = await _updateService.DownloadAndVerifyAsync(release, progress);
-                UpdateStatusText.Text = "Запускаем установку... Cleaner перезапустится из папки профиля.";
+                UpdateStatusText.Text = "Запускаем установку... DiskPulse перезапустится из папки профиля.";
                 try
                 {
                     _installerService.StartInstall(stagedExecutable);
@@ -136,15 +136,15 @@ public partial class SettingsView : UserControl
         }
         catch (UpdateException exception)
         {
-            AppLogService.Write("Не удалось проверить или установить обновление Cleaner", exception);
+            AppLogService.Write("Не удалось проверить или установить обновление DiskPulse", exception);
             UpdateStatusText.Text = exception.Message;
-            await _dialog.ShowMessageAsync("Обновление Cleaner", exception.Message);
+            await _dialog.ShowMessageAsync("Обновление DiskPulse", exception.Message);
         }
         catch (Exception exception)
         {
-            AppLogService.Write("Не удалось проверить или установить обновление Cleaner", exception);
+            AppLogService.Write("Не удалось проверить или установить обновление DiskPulse", exception);
             UpdateStatusText.Text = "Не удалось выполнить обновление.";
-            await _dialog.ShowMessageAsync("Обновление Cleaner", "Не удалось проверить или установить обновление. Подробности сохранены в журнале Cleaner.");
+            await _dialog.ShowMessageAsync("Обновление DiskPulse", "Не удалось проверить или установить обновление. Подробности сохранены в журнале DiskPulse.");
         }
         finally
         {
@@ -156,8 +156,8 @@ public partial class SettingsView : UserControl
     {
         if (_updateOperationInProgress) return;
         var install = await _dialog.ConfirmAsync(
-            "Установка Cleaner",
-            $"Установить версию {CleanerVersion.Current} в папку профиля пользователя? Cleaner создаст ярлык в меню «Пуск» и перезапустится из новой папки. Исходный portable-файл останется на месте.",
+            "Установка DiskPulse",
+            $"Установить версию {CleanerVersion.Current} в папку профиля пользователя? DiskPulse создаст ярлык в меню «Пуск» и перезапустится из новой папки. Исходный portable-файл останется на месте.",
             "Установить",
             "Отмена");
         if (!install) return;
@@ -169,7 +169,7 @@ public partial class SettingsView : UserControl
         {
             stagedExecutable = _installerService.StageCurrentExecutable();
             _installerService.StartInstall(stagedExecutable);
-            UpdateStatusText.Text = "Cleaner перезапустится из папки профиля.";
+            UpdateStatusText.Text = "DiskPulse перезапустится из папки профиля.";
             Application.Current.Shutdown();
         }
         catch (Exception exception)
@@ -178,9 +178,9 @@ public partial class SettingsView : UserControl
             {
                 _installerService.DeleteStagedExecutable(stagedExecutable);
             }
-            AppLogService.Write("Не удалось установить Cleaner в профиль пользователя", exception);
-            UpdateStatusText.Text = "Не удалось установить Cleaner.";
-            await _dialog.ShowMessageAsync("Установка Cleaner", "Не удалось установить Cleaner. Подробности сохранены в журнале Cleaner.");
+            AppLogService.Write("Не удалось установить DiskPulse в профиль пользователя", exception);
+            UpdateStatusText.Text = "Не удалось установить DiskPulse.";
+            await _dialog.ShowMessageAsync("Установка DiskPulse", "Не удалось установить DiskPulse. Подробности сохранены в журнале DiskPulse.");
         }
         finally
         {

@@ -48,7 +48,7 @@ public partial class HistoryView : UserControl
         {
             Title = "Экспорт отчёта об очистках",
             Filter = "CSV (разделители — запятые)|*.csv|JSON (*.json)|*.json",
-            FileName = $"cleaner-history-{DateTime.Now:yyyyMMdd-HHmm}"
+            FileName = $"diskpulse-history-{DateTime.Now:yyyyMMdd-HHmm}"
         };
         if (dialog.ShowDialog() != true)
         {
@@ -69,7 +69,7 @@ public partial class HistoryView : UserControl
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
             AppLogService.Write("Ошибка экспорта истории очисток", exception);
-            await _dialog.ShowMessageAsync("Cleaner", "Не удалось сохранить файл отчёта. Проверьте права доступа.");
+            await _dialog.ShowMessageAsync("DiskPulse", "Не удалось сохранить файл отчёта. Проверьте права доступа.");
         }
     }
 
@@ -95,7 +95,7 @@ public partial class HistoryView : UserControl
         }
         else
         {
-            await _dialog.ShowMessageAsync("Cleaner", "Не удалось очистить историю. Закройте программы, которые могут использовать файл, и повторите попытку.");
+            await _dialog.ShowMessageAsync("DiskPulse", "Не удалось очистить историю. Закройте программы, которые могут использовать файл, и повторите попытку.");
         }
     }
 
